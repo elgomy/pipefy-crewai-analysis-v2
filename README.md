@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🤖 CrewAI Analysis v2.0 - Triagem Agent
 
 **Servicio Especializado en Triagem Documental con IA**
@@ -177,3 +178,7 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 **Versión**: 2.0 - Especializado en Triagem  
 **Agente Principal**: Especialista en Conformidade Documental  
 **Arquitectura**: IA Estratega en Modelo Híbrido
+=======
+# pipefy-crewai-analysis-v2
+🤖 Servicio de Análisis CrewAI v2.0 - IA Estratega especializada en Triagem Documental. Agente inteligente para validación de conformidad documental con base de conocimiento dinámica.
+>>>>>>> d25638b2349141f25856919b13cf2fdf87f0c7fa
