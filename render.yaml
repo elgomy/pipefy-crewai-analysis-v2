@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: pipefy-crewai-analysis-v2
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.6
+      - key: PORT
+        value: 8001
+      # Las demás variables de entorno se configurarán en el dashboard de Render
+      # por seguridad (OPENAI_API_KEY, SUPABASE_URL, etc.)
