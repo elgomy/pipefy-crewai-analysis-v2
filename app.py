@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Variables de entorno
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Cliente Supabase global
@@ -46,8 +46,8 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("🤖 Iniciando Pipefy CrewAI Analysis Service v2.0...")
     
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        logger.error("ERRO: Variáveis SUPABASE_URL e SUPABASE_SERVICE_KEY são obrigatórias.")
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        logger.error("ERRO: Variáveis SUPABASE_URL e SUPABASE_ANON_KEY são obrigatórias.")
         raise RuntimeError("Configuração Supabase incompleta.")
     
     if not OPENAI_API_KEY:
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Token OpenAI não configurado.")
     
     try:
-        supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
         logger.info("✅ Cliente Supabase inicializado com sucesso.")
     except Exception as e:
         logger.error(f"ERRO ao inicializar cliente Supabase: {e}")
@@ -98,8 +98,12 @@ def create_faq_knowledge_source() -> PDFKnowledgeSource:
     """Cria a fonte de conhecimento baseada no FAQ.pdf"""
     try:
         # O arquivo deve estar em knowledge/FAQ.pdf (raíz do projeto)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        knowledge_dir = os.path.join(current_dir, "knowledge")
+        faq_path = os.path.join(knowledge_dir, "FAQ.pdf")
+        
         faq_source = PDFKnowledgeSource(
-            file_paths=["FAQ.pdf"]  # Ruta relativa desde el directorio knowledge/
+            file_paths=[faq_path]  # Ruta absoluta al archivo FAQ.pdf
         )
         logger.info("✅ Fonte de conhecimento FAQ.pdf criada com sucesso")
         return faq_source
@@ -181,7 +185,7 @@ def create_triagem_task(request: AnalysisRequest, agent: Agent) -> Task:
     documents_data = [
         {
             "file_url": doc.file_url,
-            "document_type": doc.document_type,
+            "name": doc.name,
             "document_tag": doc.document_tag
         }
         for doc in request.documents
