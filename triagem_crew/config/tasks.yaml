@@ -1,0 +1,57 @@
+tarefa_validacao_documental:
+  description: |
+    Para o caso '{case_id}', analise todos os documentos em '{documents}'.
+    Use o texto do checklist em '{checklist_content}' como sua lista de regras principal.
+    Use seu conhecimento de fundo do 'FAQ.pdf' para refinar sua análise.
+    
+    INSTRUÇÕES ESPECÍFICAS:
+    1. Valide cada item do checklist contra os documentos fornecidos
+    2. Consulte o FAQ.pdf para casos especiais e exceções
+    3. Determine o status geral do caso: 'Pendencia_Bloqueante', 'Pendencia_NaoBloqueante', ou 'Aprovado'
+    4. Crie uma lista detalhada de ações requeridas para as pendências encontradas
+    5. Classifique cada pendência como 'Bloqueante' ou 'NaoBloqueante'
+    
+    CRITÉRIOS DE ANÁLISE:
+    - Pendência Bloqueante: Impede a aprovação do cadastro (documentos obrigatórios ausentes, informações incorretas críticas)
+    - Pendência Não-Bloqueante: Pode ser resolvida posteriormente (documentos complementares, pequenas correções)
+    - Aprovado: Todos os requisitos essenciais atendidos
+    
+    Seu output final DEVE ser um único objeto JSON válido.
+  expected_output: |
+    Um único objeto JSON com a seguinte estrutura:
+    {{
+      "case_id": "{case_id}",
+      "status_geral": "Pendencia_Bloqueante|Pendencia_NaoBloqueante|Aprovado",
+      "resumo_analise": "Resumo executivo da análise realizada",
+      "documentos_analisados": [
+        {{
+          "nome": "nome_do_documento.pdf",
+          "status": "Conforme|Pendente|Ausente",
+          "observacoes": "Detalhes específicos sobre o documento"
+        }}
+      ],
+      "pendencias": [
+        {{
+          "tipo": "Bloqueante|NaoBloqueante",
+          "categoria": "categoria_da_pendencia",
+          "descricao": "Descrição detalhada da pendência",
+          "acao_requerida": "Ação específica necessária para resolver",
+          "prazo_sugerido": "Prazo recomendado para resolução"
+        }}
+      ],
+      "proximos_passos": [
+        "Lista de ações prioritárias para resolução das pendências"
+      ],
+      "recomendacoes": "Recomendações adicionais para o cliente",
+      "data_analise": "{current_date}",
+      "analista": "triagem_agente"
+    }}
+  agent: triagem_agente
+  tools:
+    - knowledge_base_query_tool
+    - supabase_document_tool
+  context: |
+    Você está analisando documentos de cadastro para validação de conformidade.
+    Use o FAQ.pdf como sua principal fonte de regras e exceções.
+    Seja rigoroso mas justo na análise, considerando o contexto empresarial.
+  output_format: "json" 
