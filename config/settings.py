@@ -34,6 +34,9 @@ class Settings:
     CREW_MEMORY: bool = os.getenv("CREW_MEMORY", "True").lower() == "true"
     PROCESSING_TIMEOUT: int = int(os.getenv("PROCESSING_TIMEOUT", "300"))
     
+    # Document Ingestion Configuration
+    DOCUMENT_INGESTION_URL: str = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-modular.onrender.com")
+    
     @classmethod
     def validate_required_vars(cls) -> list[str]:
         """
