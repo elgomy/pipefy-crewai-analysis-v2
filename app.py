@@ -241,7 +241,7 @@ def create_triagem_agent() -> Agent:
 def create_triagem_task(request: AnalysisRequest, agent: Agent) -> Task:
     """Cria a tarefa de validação baseada na configuração YAML"""
     config = load_task_config()
-    task_config = config["validacao_documentos"]
+    task_config = config["tarefa_validacao_documental"]
     
     # Preparar dados dos documentos
     documents_data = [
