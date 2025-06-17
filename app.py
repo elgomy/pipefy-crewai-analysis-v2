@@ -97,13 +97,23 @@ class AnalysisResponse(BaseModel):
 def create_faq_knowledge_source() -> PDFKnowledgeSource:
     """Cria a fonte de conhecimento baseada no FAQ.pdf"""
     try:
+        # Obtener directorio actual del archivo app.py
         base_dir = os.path.dirname(os.path.abspath(__file__))
+        logger.info(f"🏠 Directorio base: {base_dir}")
+        
+        # Rutas candidatas priorizando las más simples y directas
         candidate_paths = [
-            os.path.join(base_dir, "triagem_crew", "knowledge", "FAQ.pdf"),
+            # Ruta directa desde el directorio base
             os.path.join(base_dir, "knowledge", "FAQ.pdf"),
-            os.path.abspath(os.path.join("triagem_crew", "knowledge", "FAQ.pdf")),
-            os.path.abspath(os.path.join("knowledge", "FAQ.pdf")),
+            os.path.join(base_dir, "triagem_crew", "knowledge", "FAQ.pdf"),
+            # Rutas relativas para compatibilidad con diferentes entornos
+            os.path.abspath("knowledge/FAQ.pdf"),
+            os.path.abspath("triagem_crew/knowledge/FAQ.pdf"),
+            # Rutas absolutas desde /opt/render/project (entorno Render)
+            "/opt/render/project/src/knowledge/FAQ.pdf",
+            "/opt/render/project/src/triagem_crew/knowledge/FAQ.pdf"
         ]
+        
         # Eliminar duplicados preservando orden
         seen = set()
         possible_paths = []
@@ -111,20 +121,35 @@ def create_faq_knowledge_source() -> PDFKnowledgeSource:
             if p not in seen:
                 possible_paths.append(p)
                 seen.add(p)
-        logger.info(f"🔎 Buscando FAQ.pdf en las siguientes rutas (absolutas): {possible_paths}")
+        
+        logger.info(f"🔎 Buscando FAQ.pdf en {len(possible_paths)} rutas candidatas")
+        
         faq_path = None
-        for path in possible_paths:
-            logger.info(f"Verificando existencia de: {path}")
+        for i, path in enumerate(possible_paths, 1):
+            logger.info(f"[{i}/{len(possible_paths)}] Verificando: {path}")
             if os.path.exists(path):
                 faq_path = path
                 logger.info(f"✅ FAQ.pdf encontrado en: {faq_path}")
                 break
+            else:
+                logger.debug(f"❌ No existe: {path}")
+        
         if not faq_path:
-            logger.error(f"❌ FAQ.pdf no encontrado en ninguna de las rutas: {possible_paths}")
-            raise FileNotFoundError(f"File not found in any of: {possible_paths}")
+            # Listar contenido del directorio para debug
+            logger.error(f"❌ FAQ.pdf no encontrado. Contenido del directorio base ({base_dir}):")
+            try:
+                for item in os.listdir(base_dir):
+                    item_path = os.path.join(base_dir, item)
+                    logger.error(f"  - {item} ({'dir' if os.path.isdir(item_path) else 'file'})")
+            except Exception as list_error:
+                logger.error(f"Error listando directorio: {list_error}")
+            
+            raise FileNotFoundError(f"FAQ.pdf not found in any of: {possible_paths}")
+        
         faq_source = PDFKnowledgeSource(file_paths=[faq_path])
         logger.info(f"✅ Fonte de conhecimento FAQ.pdf criada com sucesso em: {faq_path}")
         return faq_source
+        
     except Exception as e:
         logger.error(f"❌ Erro ao criar fonte de conhecimento FAQ.pdf: {e}")
         raise
