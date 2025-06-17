@@ -13,3 +13,4 @@ sentence-transformers
 llama-parse
 llama-index
 python-multipart
+pyyaml
