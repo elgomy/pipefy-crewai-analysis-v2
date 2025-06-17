@@ -285,21 +285,34 @@ async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) ->
         if not supabase_client:
             logger.error("Cliente Supabase não disponível")
             return False
-        # --- Refuerzo de robustez ---
-        # Si analysis_result no es dict, intentar parsear o forzar dict vacío
+        # --- Robustez extrema y logging ---
+        logger.info(f"🧪 [save_analysis_result] Tipo de analysis_result: {type(analysis_result)} | Valor: {repr(analysis_result)}")
+        import json
+        # Si no es dict, intentar parsear
         if not isinstance(analysis_result, dict):
-            import json
             try:
                 analysis_result = json.loads(analysis_result)
-                logger.warning(f"⚠️ analysis_result recibido como str, convertido a dict")
-            except Exception as e:
-                logger.error(f"❌ analysis_result no es dict ni JSON válido: {e}. Valor: {analysis_result}")
-                analysis_result = {}
+                logger.warning(f"⚠️ analysis_result recibido como str, convertido a dict (JSON)")
+            except Exception as e1:
+                # Intentar parsear reemplazando comillas simples por dobles
+                try:
+                    analysis_result_fixed = analysis_result.replace("'", '"')
+                    analysis_result = json.loads(analysis_result_fixed)
+                    logger.warning(f"⚠️ analysis_result convertido a dict tras reemplazar comillas simples por dobles")
+                except Exception as e2:
+                    logger.error(f"❌ analysis_result no es dict ni JSON válido: {e1} | {e2}. Valor: {analysis_result}")
+                    analysis_result = {}
+        # Solo llamar a .get si es dict
+        if isinstance(analysis_result, dict):
+            status_value = analysis_result.get("status_geral", "Pendente")
+        else:
+            logger.error(f"❌ analysis_result NO es dict tras todos los intentos. Valor final: {repr(analysis_result)}")
+            status_value = "Pendente"
         # Preparar datos para inserção
         data_to_insert = {
             "case_id": case_id,
             "informe": json.dumps(analysis_result, ensure_ascii=False, indent=2),
-            "status": analysis_result.get("status_geral", "Pendente"),
+            "status": status_value,
             "created_at": datetime.now().isoformat(),
             "service": "crewai_triagem_v2"
         }
