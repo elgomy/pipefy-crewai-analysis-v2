@@ -285,8 +285,17 @@ async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) ->
         if not supabase_client:
             logger.error("Cliente Supabase não disponível")
             return False
-        
-        # Preparar dados para inserção
+        # --- Refuerzo de robustez ---
+        # Si analysis_result no es dict, intentar parsear o forzar dict vacío
+        if not isinstance(analysis_result, dict):
+            import json
+            try:
+                analysis_result = json.loads(analysis_result)
+                logger.warning(f"⚠️ analysis_result recibido como str, convertido a dict")
+            except Exception as e:
+                logger.error(f"❌ analysis_result no es dict ni JSON válido: {e}. Valor: {analysis_result}")
+                analysis_result = {}
+        # Preparar datos para inserção
         data_to_insert = {
             "case_id": case_id,
             "informe": json.dumps(analysis_result, ensure_ascii=False, indent=2),
