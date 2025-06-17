@@ -97,12 +97,12 @@ class AnalysisResponse(BaseModel):
 def create_faq_knowledge_source() -> PDFKnowledgeSource:
     """Cria a fonte de conhecimento baseada no FAQ.pdf"""
     try:
-        # Definir rutas absolutas posibles
         base_dir = os.path.dirname(os.path.abspath(__file__))
         candidate_paths = [
-            os.path.join(base_dir, "knowledge", "FAQ.pdf"),  # Siempre funciona en local y en Render si estructura se respeta
-            os.path.abspath(os.path.join("knowledge", "FAQ.pdf")),  # Por si se ejecuta desde raíz del repo
-            "/opt/render/project/src/knowledge/FAQ.pdf"  # Ruta absoluta típica de Render
+            os.path.join(base_dir, "triagem_crew", "knowledge", "FAQ.pdf"),
+            os.path.join(base_dir, "knowledge", "FAQ.pdf"),
+            os.path.abspath(os.path.join("triagem_crew", "knowledge", "FAQ.pdf")),
+            os.path.abspath(os.path.join("knowledge", "FAQ.pdf")),
         ]
         # Eliminar duplicados preservando orden
         seen = set()
