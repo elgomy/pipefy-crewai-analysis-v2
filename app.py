@@ -343,16 +343,30 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
             analysis_result = result.raw
         else:
             analysis_result = str(result)
-        
+
+        # Asegurar que analysis_result sea dict
+        if isinstance(analysis_result, str):
+            import json
+            try:
+                analysis_result_dict = json.loads(analysis_result)
+            except Exception as e:
+                logger.error(f"❌ Error al parsear analysis_result a dict: {e}. Valor: {analysis_result}")
+                analysis_result_dict = {}
+        elif isinstance(analysis_result, dict):
+            analysis_result_dict = analysis_result
+        else:
+            logger.error(f"❌ analysis_result es de tipo inesperado: {type(analysis_result)}")
+            analysis_result_dict = {}
+
         logger.info("✅ Análise CrewAI concluída")
         
         # Guardar resultado
-        await save_analysis_result(request.case_id, analysis_result)
+        await save_analysis_result(request.case_id, analysis_result_dict)
         
         return AnalysisResponse(
             case_id=request.case_id,
             status="completed",
-            analysis_result=analysis_result,
+            analysis_result=analysis_result_dict,
             message="Análise concluída com sucesso"
         )
         
