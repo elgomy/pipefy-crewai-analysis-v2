@@ -97,18 +97,30 @@ class AnalysisResponse(BaseModel):
 def create_faq_knowledge_source() -> PDFKnowledgeSource:
     """Cria a fonte de conhecimento baseada no FAQ.pdf"""
     try:
-        possible_paths = [
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "knowledge", "FAQ.pdf"),
-            os.path.join(os.getcwd(), "knowledge", "FAQ.pdf"),
-            "/opt/render/project/src/knowledge/FAQ.pdf"
+        # Definir rutas absolutas posibles
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        candidate_paths = [
+            os.path.join(base_dir, "knowledge", "FAQ.pdf"),  # Siempre funciona en local y en Render si estructura se respeta
+            os.path.abspath(os.path.join("knowledge", "FAQ.pdf")),  # Por si se ejecuta desde raíz del repo
+            "/opt/render/project/src/knowledge/FAQ.pdf"  # Ruta absoluta típica de Render
         ]
-        logger.info(f"🔎 Buscando FAQ.pdf en las siguientes rutas: {possible_paths}")
+        # Eliminar duplicados preservando orden
+        seen = set()
+        possible_paths = []
+        for p in candidate_paths:
+            if p not in seen:
+                possible_paths.append(p)
+                seen.add(p)
+        logger.info(f"🔎 Buscando FAQ.pdf en las siguientes rutas (absolutas): {possible_paths}")
         faq_path = None
         for path in possible_paths:
+            logger.info(f"Verificando existencia de: {path}")
             if os.path.exists(path):
                 faq_path = path
+                logger.info(f"✅ FAQ.pdf encontrado en: {faq_path}")
                 break
         if not faq_path:
+            logger.error(f"❌ FAQ.pdf no encontrado en ninguna de las rutas: {possible_paths}")
             raise FileNotFoundError(f"File not found in any of: {possible_paths}")
         faq_source = PDFKnowledgeSource(file_paths=[faq_path])
         logger.info(f"✅ Fonte de conhecimento FAQ.pdf criada com sucesso em: {faq_path}")
