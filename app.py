@@ -97,22 +97,20 @@ class AnalysisResponse(BaseModel):
 def create_faq_knowledge_source() -> PDFKnowledgeSource:
     """Cria a fonte de conhecimento baseada no FAQ.pdf"""
     try:
-        # Buscar el archivo en varias ubicaciones posibles
         possible_paths = [
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "knowledge", "FAQ.pdf"),
             os.path.join(os.getcwd(), "knowledge", "FAQ.pdf"),
             "/opt/render/project/src/knowledge/FAQ.pdf"
         ]
+        logger.info(f"🔎 Buscando FAQ.pdf en las siguientes rutas: {possible_paths}")
         faq_path = None
         for path in possible_paths:
             if os.path.exists(path):
                 faq_path = path
                 break
         if not faq_path:
-            raise FileNotFoundError(f"File not found: {possible_paths}")
-        faq_source = PDFKnowledgeSource(
-            file_paths=[faq_path]
-        )
+            raise FileNotFoundError(f"File not found in any of: {possible_paths}")
+        faq_source = PDFKnowledgeSource(file_paths=[faq_path])
         logger.info(f"✅ Fonte de conhecimento FAQ.pdf criada com sucesso em: {faq_path}")
         return faq_source
     except Exception as e:
