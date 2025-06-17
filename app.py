@@ -99,47 +99,76 @@ def create_faq_knowledge_source() -> PDFKnowledgeSource:
     import os
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        render_path = "/opt/render/project/src/knowledge/FAQ.pdf"
-        if os.path.exists(render_path):
-            # Estamos en Render, cambiar cwd y usar ruta relativa
-            os.chdir("/opt/render/project/src")
-            logger.info("🌐 Detectado entorno Render. Cambiado cwd a /opt/render/project/src para rutas relativas.")
-            faq_path = "knowledge/FAQ.pdf"
-            if not os.path.exists(faq_path):
-                logger.error(f"❌ FAQ.pdf no encontrado en {faq_path} tras cambiar cwd en Render.")
-                raise FileNotFoundError(f"FAQ.pdf not found in {faq_path} (Render)")
-            faq_source = PDFKnowledgeSource(file_paths=[faq_path])
-            logger.info(f"✅ Fonte de conhecimento FAQ.pdf criada com sucesso em: {faq_path} (Render)")
-            return faq_source
-        # Lógica multiplataforma para local y otros entornos
-        candidate_paths = [
-            os.path.join(base_dir, "knowledge", "FAQ.pdf"),
-            os.path.join(base_dir, "triagem_crew", "knowledge", "FAQ.pdf"),
-            os.path.abspath("knowledge/FAQ.pdf"),
-            os.path.abspath("triagem_crew/knowledge/FAQ.pdf")
-        ]
-        seen = set()
-        possible_paths = []
-        for p in candidate_paths:
-            if p not in seen:
-                possible_paths.append(p)
-                seen.add(p)
-        logger.info(f"🔎 Buscando FAQ.pdf en {len(possible_paths)} rutas candidatas (local/dev)")
-        faq_path = None
-        for i, path in enumerate(possible_paths, 1):
-            logger.info(f"[{i}/{len(possible_paths)}] Verificando: {path}")
-            if os.path.exists(path):
-                faq_path = path
-                logger.info(f"✅ FAQ.pdf encontrado en: {faq_path}")
-                break
-            else:
-                logger.debug(f"❌ No existe: {path}")
-        if not faq_path:
-            logger.error(f"❌ FAQ.pdf no encontrado en ninguna de las rutas: {possible_paths}")
-            raise FileNotFoundError(f"FAQ.pdf not found in any of: {possible_paths}")
-        faq_source = PDFKnowledgeSource(file_paths=[faq_path])
-        logger.info(f"✅ Fonte de conhecimento FAQ.pdf criada com sucesso em: {faq_path}")
-        return faq_source
+        logger.info(f"🏠 Directorio base: {base_dir}")
+        
+        # SOLUCIÓN DEFINITIVA: PDFKnowledgeSource SIEMPRE prefixa "knowledge/"
+        # Por tanto, debemos darle SOLO el nombre del archivo, no la ruta completa
+        # Y el working directory debe ser el directorio que contiene "knowledge/"
+        
+        # Detectar si estamos en Render
+        render_knowledge_path = "/opt/render/project/src/knowledge/FAQ.pdf"
+        render_triagem_path = "/opt/render/project/src/triagem_crew/knowledge/FAQ.pdf"
+        
+        original_cwd = os.getcwd()
+        logger.info(f"🔄 Directorio de trabajo original: {original_cwd}")
+        
+        try:
+            if os.path.exists(render_knowledge_path):
+                # Entorno Render - usar knowledge/ directo
+                logger.info("🌐 Detectado entorno Render - usando /opt/render/project/src/knowledge/")
+                os.chdir("/opt/render/project/src")
+                
+                # PDFKnowledgeSource buscará: knowledge/ + FAQ.pdf = knowledge/FAQ.pdf ✅
+                logger.info("🚀 Creando PDFKnowledgeSource con archivo: FAQ.pdf")
+                faq_source = PDFKnowledgeSource(file_paths=["FAQ.pdf"])
+                logger.info("✅ FAQ.pdf cargado exitosamente desde directorio knowledge/")
+                return faq_source
+                
+            elif os.path.exists(render_triagem_path):
+                # Entorno Render - usar triagem_crew/knowledge/
+                logger.info("🌐 Detectado entorno Render - usando /opt/render/project/src/triagem_crew/")
+                os.chdir("/opt/render/project/src/triagem_crew")
+                
+                # PDFKnowledgeSource buscará: knowledge/ + FAQ.pdf = knowledge/FAQ.pdf ✅
+                logger.info("🚀 Creando PDFKnowledgeSource con archivo: FAQ.pdf")
+                faq_source = PDFKnowledgeSource(file_paths=["FAQ.pdf"])
+                logger.info("✅ FAQ.pdf cargado exitosamente desde directorio triagem_crew/knowledge/")
+                return faq_source
+            
+            # Entorno local/desarrollo
+            local_knowledge = os.path.join(base_dir, "knowledge", "FAQ.pdf")
+            local_triagem = os.path.join(base_dir, "triagem_crew", "knowledge", "FAQ.pdf")
+            
+            if os.path.exists(local_knowledge):
+                logger.info("🏠 Entorno local - usando knowledge/ directo")
+                os.chdir(base_dir)
+                logger.info("🚀 Creando PDFKnowledgeSource con archivo: FAQ.pdf")
+                faq_source = PDFKnowledgeSource(file_paths=["FAQ.pdf"])
+                logger.info("✅ FAQ.pdf cargado exitosamente desde directorio local knowledge/")
+                return faq_source
+                
+            elif os.path.exists(local_triagem):
+                logger.info("🏠 Entorno local - usando triagem_crew/knowledge/")
+                triagem_dir = os.path.join(base_dir, "triagem_crew")
+                os.chdir(triagem_dir)
+                logger.info("🚀 Creando PDFKnowledgeSource con archivo: FAQ.pdf")
+                faq_source = PDFKnowledgeSource(file_paths=["FAQ.pdf"])
+                logger.info("✅ FAQ.pdf cargado exitosamente desde directorio local triagem_crew/knowledge/")
+                return faq_source
+            
+            # Si llegamos aquí, no encontramos el archivo
+            logger.error(f"❌ FAQ.pdf no encontrado en ninguna ubicación conocida")
+            logger.error(f"   Verificado: {render_knowledge_path}")
+            logger.error(f"   Verificado: {render_triagem_path}")
+            logger.error(f"   Verificado: {local_knowledge}")
+            logger.error(f"   Verificado: {local_triagem}")
+            raise FileNotFoundError("FAQ.pdf not found in any expected location")
+            
+        finally:
+            # Restaurar directorio original
+            os.chdir(original_cwd)
+            logger.info(f"🔄 Directorio restaurado a: {original_cwd}")
+            
     except Exception as e:
         logger.error(f"❌ Erro ao criar fonte de conhecimento FAQ.pdf: {e}")
         raise
