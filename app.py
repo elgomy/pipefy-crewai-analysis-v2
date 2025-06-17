@@ -97,15 +97,23 @@ class AnalysisResponse(BaseModel):
 def create_faq_knowledge_source() -> PDFKnowledgeSource:
     """Cria a fonte de conhecimento baseada no FAQ.pdf"""
     try:
-        # O arquivo deve estar em knowledge/FAQ.pdf (raíz do projeto)
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        knowledge_dir = os.path.join(current_dir, "knowledge")
-        faq_path = os.path.join(knowledge_dir, "FAQ.pdf")
-        
+        # Buscar el archivo en varias ubicaciones posibles
+        possible_paths = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "knowledge", "FAQ.pdf"),
+            os.path.join(os.getcwd(), "knowledge", "FAQ.pdf"),
+            "/opt/render/project/src/knowledge/FAQ.pdf"
+        ]
+        faq_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                faq_path = path
+                break
+        if not faq_path:
+            raise FileNotFoundError(f"File not found: {possible_paths}")
         faq_source = PDFKnowledgeSource(
-            file_paths=[faq_path]  # Ruta absoluta al archivo FAQ.pdf
+            file_paths=[faq_path]
         )
-        logger.info("✅ Fonte de conhecimento FAQ.pdf criada com sucesso")
+        logger.info(f"✅ Fonte de conhecimento FAQ.pdf criada com sucesso em: {faq_path}")
         return faq_source
     except Exception as e:
         logger.error(f"❌ Erro ao criar fonte de conhecimento FAQ.pdf: {e}")
@@ -293,11 +301,10 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
     except Exception as e:
         error_msg = f"Erro na análise: {str(e)}"
         logger.error(f"❌ {error_msg}")
-        
         return AnalysisResponse(
             case_id=request.case_id,
             status="error",
-            analysis_result="",
+            analysis_result={},  # Siempre dict vacío para evitar error de Pydantic
             message=error_msg
         )
 
