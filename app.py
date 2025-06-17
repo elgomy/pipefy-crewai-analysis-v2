@@ -242,7 +242,6 @@ def create_triagem_task(request: AnalysisRequest, agent: Agent) -> Task:
     """Cria a tarefa de validação baseada na configuração YAML"""
     config = load_task_config()
     task_config = config["tarefa_validacao_documental"]
-    
     # Preparar dados dos documentos
     documents_data = [
         {
@@ -252,7 +251,6 @@ def create_triagem_task(request: AnalysisRequest, agent: Agent) -> Task:
         }
         for doc in request.documents
     ]
-    
     # Formatar descrição com dados específicos
     description = task_config["description"].format(
         case_id=request.case_id,
@@ -260,17 +258,23 @@ def create_triagem_task(request: AnalysisRequest, agent: Agent) -> Task:
         checklist_content=f"Checklist disponível em: {request.checklist_url}",
         current_date=request.current_date
     )
-    
     expected_output = task_config["expected_output"].format(
         case_id=request.case_id,
         current_date=request.current_date
     )
-    
+    # Corregir context: siempre debe ser lista
+    context_value = task_config.get("context", "")
+    if isinstance(context_value, str):
+        context = [context_value.strip()] if context_value.strip() else []
+    elif isinstance(context_value, list):
+        context = context_value
+    else:
+        context = []
     return Task(
         description=description,
         expected_output=expected_output,
         agent=agent,
-        context=task_config.get("context", ""),
+        context=context,
         output_format=task_config.get("output_format", "json")
     )
 
