@@ -11,6 +11,7 @@ import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
+import re
 
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -265,6 +266,16 @@ def sanitize_informe_cadastro_payload(data: dict) -> dict:
     """
     return {k: v for k, v in data.items() if k in INFORME_CADASTRO_FIELDS}
 
+def clean_json_string(raw: str) -> str:
+    """
+    Elimina backticks, saltos de línea y espacios innecesarios del string JSON.
+    """
+    if not isinstance(raw, str):
+        return raw
+    # Elimina triple backtick y espacios
+    cleaned = re.sub(r"^`{3,}\s*|\s*`{3,}$", "", raw.strip())
+    return cleaned.strip()
+
 # Função para salvar resultado no Supabase
 async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) -> bool:
     """Salva o resultado da análise na tabela informe_cadastro"""
@@ -272,11 +283,19 @@ async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) ->
         if not supabase_client:
             logger.error("Cliente Supabase não disponível")
             return False
-        # --- Robustez extrema y logging ---
         logger.info(f"🧪 [save_analysis_result] Tipo de analysis_result: {type(analysis_result)} | Valor: {repr(analysis_result)}")
         import json
         import traceback
-        if not isinstance(analysis_result, dict):
+        # Si analysis_result es string, limpiar y parsear
+        if isinstance(analysis_result, str):
+            try:
+                cleaned = clean_json_string(analysis_result)
+                analysis_result = json.loads(cleaned)
+            except Exception as e:
+                logger.error(f"❌ Error al limpiar/parsear analysis_result: {e}")
+                logger.error(traceback.format_exc())
+                analysis_result = {"raw_result": analysis_result}
+        elif not isinstance(analysis_result, dict):
             logger.error(f"❌ analysis_result NO es dict en save_analysis_result. Valor: {repr(analysis_result)}")
             logger.error(traceback.format_exc())
             analysis_result = {"raw_result": analysis_result}
@@ -290,9 +309,7 @@ async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) ->
             "informe": json.dumps(analysis_result, ensure_ascii=False, indent=2),
             "status": status_value,
             "created_at": datetime.now().isoformat(),
-            # "service": "crewai_triagem_v2"  # Eliminado: no existe en la tabla
         }
-        # Saneamiento defensivo
         data_to_insert = sanitize_informe_cadastro_payload(data_to_insert)
         response = await asyncio.to_thread(
             supabase_client.table("informe_cadastro").upsert(data_to_insert, on_conflict="case_id").execute
