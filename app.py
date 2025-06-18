@@ -83,7 +83,6 @@ class DocumentInfo(BaseModel):
 class AnalysisRequest(BaseModel):
     case_id: str = Field(..., description="ID do case/card do Pipefy")
     documents: List[DocumentInfo] = Field(..., description="Lista de documentos para análise")
-    checklist_url: str = Field(..., description="URL do checklist de referência")
     current_date: str = Field(default_factory=lambda: datetime.now().isoformat(), description="Data atual")
     pipe_id: Optional[str] = Field(None, description="ID do pipe do Pipefy")
 
@@ -252,7 +251,6 @@ def create_triagem_task(request: AnalysisRequest, agent: Agent) -> Task:
     description = task_config["description"].format(
         case_id=request.case_id,
         documents=json.dumps(documents_data, indent=2),
-        checklist_content=f"Checklist disponível em: {request.checklist_url}",
         current_date=request.current_date
     )
     expected_output = task_config["expected_output"].format(
@@ -334,7 +332,7 @@ class TriagemCrew:
         # Crear agente
         agent = create_triagem_agent()
         # Crear tarea
-        task = create_triagem_task_from_inputs(self.inputs, agent)
+        task = create_triagem_task(self.inputs, agent)
         # Crear crew
         crew = Crew(
             agents=[agent],
@@ -351,11 +349,10 @@ class TriagemCrew:
 # Nueva función para crear la tarea desde inputs (como en modular)
 def create_triagem_task_from_inputs(inputs: Dict[str, Any], agent: Agent) -> Task:
     config = load_task_config()["tarefa_validacao_documental"]
-    # Formatear descripción con los datos de inputs
+    # Formatear descripción con los datos de inputs (sin checklist)
     description = config["description"].format(
         case_id=inputs.get("case_id", ""),
         documents=json.dumps(inputs.get("documents", []), ensure_ascii=False),
-        checklist=inputs.get("checklist", ""),
         current_date=inputs.get("current_date", "")
     )
     return Task(
@@ -371,26 +368,20 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
     """Analisa documentos usando CrewAI (lógica modular)"""
     try:
         logger.info(f"🚀 Iniciando análise para case_id: {request.case_id}")
-        # Preparar inputs como dict
-        checklist_content = ""  # Aquí deberías cargar el checklist dinámico si aplica
         inputs = {
             "case_id": request.case_id,
             "documents": [doc.dict() for doc in request.documents],
-            "checklist": checklist_content,
             "current_date": datetime.now().strftime('%Y-%m-%d')
         }
-        # Ejecutar CrewAI con lógica modular
         crew_runner = TriagemCrew(inputs)
         crew_result_str = crew_runner.run()
         logger.info(f"[POST /analyze] Resultado bruto CrewAI: {crew_result_str}")
-        # Extraer campos relevantes del string (puedes mejorar este parsing según el output esperado)
         try:
             result_json = json.loads(crew_result_str)
         except Exception as e:
             logger.error(f"❌ Error al parsear resultado CrewAI a JSON: {e}")
             result_json = {"raw_result": crew_result_str}
         status = result_json.get("status_geral", "Pendente")
-        # Guardar resultado en Supabase
         await save_analysis_result(request.case_id, result_json)
         logger.info("✅ Análise CrewAI concluída (modular)")
         return AnalysisResponse(

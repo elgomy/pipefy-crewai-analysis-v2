@@ -1,11 +1,10 @@
 tarefa_validacao_documental:
   description: |
     Para o caso '{case_id}', analise todos os documentos em '{documents}'.
-    Use o texto do checklist em '{checklist_content}' como sua lista de regras principal.
     Use seu conhecimento de fundo do 'FAQ.pdf' para refinar sua análise.
     
     INSTRUÇÕES ESPECÍFICAS:
-    1. Valide cada item do checklist contra os documentos fornecidos
+    1. Valide cada documento fornecido
     2. Consulte o FAQ.pdf para casos especiais e exceções
     3. Determine o status geral do caso: 'Pendencia_Bloqueante', 'Pendencia_NaoBloqueante', ou 'Aprovado'
     4. Crie uma lista detalhada de ações requeridas para as pendências encontradas
