@@ -234,43 +234,19 @@ def create_triagem_agent() -> Agent:
     )
 
 # Função para criar a tarefa
-def create_triagem_task(request: AnalysisRequest, agent: Agent) -> Task:
-    """Cria a tarefa de validação baseada na configuração YAML"""
-    config = load_task_config()
-    task_config = config["tarefa_validacao_documental"]
-    # Preparar dados dos documentos
-    documents_data = [
-        {
-            "file_url": doc.file_url,
-            "name": doc.name,
-            "document_tag": doc.document_tag
-        }
-        for doc in request.documents
-    ]
-    # Formatar descrição com dados específicos
-    description = task_config["description"].format(
-        case_id=request.case_id,
-        documents=json.dumps(documents_data, indent=2),
-        current_date=request.current_date
+def create_triagem_task_from_inputs(inputs: Dict[str, Any], agent: Agent) -> Task:
+    config = load_task_config()["tarefa_validacao_documental"]
+    # Formatear descripción con los datos de inputs (sin checklist)
+    description = config["description"].format(
+        case_id=inputs.get("case_id", ""),
+        documents=json.dumps(inputs.get("documents", []), ensure_ascii=False),
+        current_date=inputs.get("current_date", "")
     )
-    expected_output = task_config["expected_output"].format(
-        case_id=request.case_id,
-        current_date=request.current_date
-    )
-    # Corregir context: siempre debe ser lista
-    context_value = task_config.get("context", "")
-    if isinstance(context_value, str):
-        context = [context_value.strip()] if context_value.strip() else []
-    elif isinstance(context_value, list):
-        context = context_value
-    else:
-        context = []
     return Task(
         description=description,
-        expected_output=expected_output,
+        expected_output=config["expected_output"],
         agent=agent,
-        context=context,
-        output_format=task_config.get("output_format", "json")
+        context=[]
     )
 
 # Função para salvar resultado no Supabase
@@ -331,8 +307,8 @@ class TriagemCrew:
         faq_knowledge = create_faq_knowledge_source()
         # Crear agente
         agent = create_triagem_agent()
-        # Crear tarea
-        task = create_triagem_task(self.inputs, agent)
+        # Crear tarea (usar solo la versión que acepta dict)
+        task = create_triagem_task_from_inputs(self.inputs, agent)
         # Crear crew
         crew = Crew(
             agents=[agent],
@@ -345,22 +321,6 @@ class TriagemCrew:
         result = crew.kickoff(inputs=self.inputs)
         logger.info(f"[TriagemCrew] Resultado bruto de CrewAI: {repr(result)}")
         return str(result)
-
-# Nueva función para crear la tarea desde inputs (como en modular)
-def create_triagem_task_from_inputs(inputs: Dict[str, Any], agent: Agent) -> Task:
-    config = load_task_config()["tarefa_validacao_documental"]
-    # Formatear descripción con los datos de inputs (sin checklist)
-    description = config["description"].format(
-        case_id=inputs.get("case_id", ""),
-        documents=json.dumps(inputs.get("documents", []), ensure_ascii=False),
-        current_date=inputs.get("current_date", "")
-    )
-    return Task(
-        description=description,
-        expected_output=config["expected_output"],
-        agent=agent,
-        context=[]
-    )
 
 # Endpoint principal
 @app.post("/analyze", response_model=AnalysisResponse)
