@@ -177,24 +177,21 @@ class SupabaseDocumentTool(BaseTool):
     name: str = "supabase_document_tool"
     description: str = "Acessa documentos armazenados no Supabase Storage"
     
-    def _run(self, case_id: str) -> str:
+    def _run(self, case_id: str) -> dict:
         """Obtém informações dos documentos do Supabase"""
         try:
             if not supabase_client:
-                return "Cliente Supabase não disponível"
-            
+                return {"error": "Cliente Supabase não disponível"}
             # Consultar documentos na tabela
             response = supabase_client.table("documents").select("*").eq("case_id", case_id).execute()
-            
             if response.data:
                 logger.info(f"📄 Encontrados {len(response.data)} documentos para case_id: {case_id}")
-                return json.dumps(response.data, indent=2)
+                return {"documents": response.data}
             else:
-                return f"Nenhum documento encontrado para case_id: {case_id}"
-                
+                return {"documents": []}
         except Exception as e:
             logger.error(f"Erro ao acessar documentos: {e}")
-            return f"Erro no acesso: {str(e)}"
+            return {"error": str(e)}
 
 # Função para carregar configurações YAML
 def load_agent_config() -> Dict[str, Any]:
