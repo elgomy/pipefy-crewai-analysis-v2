@@ -368,9 +368,14 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
         crew_result_str = crew_runner.run()
         logger.info(f"[POST /analyze] Resultado bruto CrewAI: {crew_result_str}")
         try:
-            result_json = json.loads(crew_result_str)
+            logger.info(f"[POST /analyze] Antes de limpieza: {repr(crew_result_str)}")
+            cleaned_result = clean_json_string(crew_result_str)
+            logger.info(f"[POST /analyze] Después de limpieza: {repr(cleaned_result)}")
+            result_json = json.loads(cleaned_result)
         except Exception as e:
             logger.error(f"❌ Error al parsear resultado CrewAI a JSON: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             result_json = {"raw_result": crew_result_str}
         status = result_json.get("status_geral", "Pendente")
         await save_analysis_result(request.case_id, result_json)
