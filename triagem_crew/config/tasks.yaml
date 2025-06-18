@@ -17,6 +17,38 @@ tarefa_validacao_documental:
     - Aprovado: Todos os requisitos essenciais atendidos
     
     Seu output final DEVE ser um único objeto JSON válido.
+    NÃO inclua nenhum texto, explicação ou comentário fora do JSON. Apenas retorne o JSON puro, sem prefixos, sufixos ou mensagens adicionais. Todas as recomendações, observações e instruções devem estar dentro do objeto JSON.
+    
+    ATENÇÃO: Se você retornar qualquer texto fora do JSON, o sistema irá falhar. Apenas o JSON puro será aceito.
+    
+    Um único objeto JSON com a seguinte estrutura:
+    {{
+      "case_id": "{case_id}",
+      "status_geral": "Pendencia_Bloqueante|Pendencia_NaoBloqueante|Aprovado",
+      "resumo_analise": "Resumo executivo da análise realizada",
+      "documentos_analisados": [
+        {{
+          "nome": "nome_do_documento.pdf",
+          "status": "Conforme|Pendente|Ausente",
+          "observacoes": "Detalhes específicos sobre o documento"
+        }}
+      ],
+      "pendencias": [
+        {{
+          "tipo": "Bloqueante|NaoBloqueante",
+          "categoria": "categoria_da_pendencia",
+          "descricao": "Descrição detalhada da pendência",
+          "acao_requerida": "Ação específica necessária para resolver",
+          "prazo_sugerido": "Prazo recomendado para resolução"
+        }}
+      ],
+      "proximos_passos": [
+        "Lista de ações prioritárias para resolução das pendências"
+      ],
+      "recomendacoes": "Recomendações adicionais para o cliente",
+      "data_analise": "{current_date}",
+      "analista": "triagem_agente"
+    }}
   expected_output: |
     Um único objeto JSON com a seguinte estrutura:
     {{

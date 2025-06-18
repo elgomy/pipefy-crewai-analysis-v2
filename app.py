@@ -373,12 +373,13 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
                 analysis_result_dict = json.loads(analysis_result)
             except Exception as e:
                 logger.error(f"❌ Error al parsear analysis_result a dict: {e}. Valor: {analysis_result}")
-                analysis_result_dict = {}
+                # Envolver el string en un dict para evitar errores aguas abajo
+                analysis_result_dict = {"raw_result": analysis_result}
         elif isinstance(analysis_result, dict):
             analysis_result_dict = analysis_result
         else:
             logger.error(f"❌ analysis_result es de tipo inesperado: {type(analysis_result)}")
-            analysis_result_dict = {}
+            analysis_result_dict = {"raw_result": str(analysis_result)}
 
         logger.info("✅ Análise CrewAI concluída")
         
