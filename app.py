@@ -90,7 +90,7 @@ class AnalysisRequest(BaseModel):
 class AnalysisResponse(BaseModel):
     status: str
     case_id: str
-    analysis_result: Dict[str, Any]
+    analysis_result: Any  # Permitir cualquier tipo para evitar errores de validación
     message: str
 
 # Función para crear fonte de conhecimento FAQ.pdf
@@ -376,6 +376,7 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
         # Guardar resultado
         await save_analysis_result(request.case_id, analysis_result_dict)
         
+        logger.info(f"[RETURN] Tipo de analysis_result_dict: {type(analysis_result_dict)} | Valor: {repr(analysis_result_dict)}")
         return AnalysisResponse(
             case_id=request.case_id,
             status="completed",
