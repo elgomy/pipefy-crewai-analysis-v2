@@ -320,76 +320,90 @@ async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) ->
         logger.error(traceback.format_exc())
         return False
 
-# Endpoint principal
-@app.post("/analyze", response_model=AnalysisResponse)
-async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
-    """Analisa documentos usando CrewAI"""
-    try:
-        logger.info(f"🚀 Iniciando análise para case_id: {request.case_id}")
-        
-        # Crear fuente de conocimiento FAQ.pdf
+class TriagemCrew:
+    """
+    Orquesta la ejecución de CrewAI para triagem documental, replicando la lógica modular.
+    """
+    def __init__(self, inputs: Dict[str, Any]):
+        self.inputs = inputs
+
+    def run(self) -> str:
+        logger.info(f"[TriagemCrew] Inputs recibidos: {self.inputs}")
+        # Crear fuente de conocimiento
         faq_knowledge = create_faq_knowledge_source()
-        
-        # Crear agente y tarea
+        # Crear agente
         agent = create_triagem_agent()
-        task = create_triagem_task(request, agent)
-        
-        # Crear crew con fuente de conocimiento
+        # Crear tarea
+        task = create_triagem_task_from_inputs(self.inputs, agent)
+        # Crear crew
         crew = Crew(
             agents=[agent],
             tasks=[task],
             process=Process.sequential,
             verbose=True,
-            knowledge_sources=[faq_knowledge]  # FAQ.pdf como fuente de conocimiento
+            knowledge_sources=[faq_knowledge]
         )
-        
-        # Ejecutar análisis
-        logger.info("🔄 Executando análise CrewAI...")
-        result = crew.kickoff()
-        
-        # Procesar resultado
-        if hasattr(result, 'raw'):
-            analysis_result = result.raw
-        else:
-            analysis_result = str(result)
+        logger.info("[TriagemCrew] Ejecutando CrewAI...")
+        result = crew.kickoff(inputs=self.inputs)
+        logger.info(f"[TriagemCrew] Resultado bruto de CrewAI: {repr(result)}")
+        return str(result)
 
-        # Asegurar que analysis_result sea dict
-        if isinstance(analysis_result, str):
-            import json
-            try:
-                analysis_result_dict = json.loads(analysis_result)
-            except Exception as e:
-                logger.error(f"❌ Error al parsear analysis_result a dict: {e}. Valor: {analysis_result}")
-                # Envolver el string en un dict para evitar errores aguas abajo
-                analysis_result_dict = {"raw_result": analysis_result}
-        elif isinstance(analysis_result, dict):
-            analysis_result_dict = analysis_result
-        else:
-            logger.error(f"❌ analysis_result es de tipo inesperado: {type(analysis_result)}")
-            analysis_result_dict = {"raw_result": str(analysis_result)}
+# Nueva función para crear la tarea desde inputs (como en modular)
+def create_triagem_task_from_inputs(inputs: Dict[str, Any], agent: Agent) -> Task:
+    config = load_task_config()["tarefa_validacao_documental"]
+    # Formatear descripción con los datos de inputs
+    description = config["description"].format(
+        case_id=inputs.get("case_id", ""),
+        documents=json.dumps(inputs.get("documents", []), ensure_ascii=False),
+        checklist=inputs.get("checklist", ""),
+        current_date=inputs.get("current_date", "")
+    )
+    return Task(
+        description=description,
+        expected_output=config["expected_output"],
+        agent=agent,
+        context=[]
+    )
 
-        logger.info("✅ Análise CrewAI concluída")
-        
-        # Guardar resultado
-        await save_analysis_result(request.case_id, analysis_result_dict)
-        
-        logger.info(f"[RETURN] Tipo de analysis_result_dict: {type(analysis_result_dict)} | Valor: {repr(analysis_result_dict)}")
+# Endpoint principal
+@app.post("/analyze", response_model=AnalysisResponse)
+async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
+    """Analisa documentos usando CrewAI (lógica modular)"""
+    try:
+        logger.info(f"🚀 Iniciando análise para case_id: {request.case_id}")
+        # Preparar inputs como dict
+        checklist_content = ""  # Aquí deberías cargar el checklist dinámico si aplica
+        inputs = {
+            "case_id": request.case_id,
+            "documents": [doc.dict() for doc in request.documents],
+            "checklist": checklist_content,
+            "current_date": datetime.now().strftime('%Y-%m-%d')
+        }
+        # Ejecutar CrewAI con lógica modular
+        crew_runner = TriagemCrew(inputs)
+        crew_result_str = crew_runner.run()
+        logger.info(f"[POST /analyze] Resultado bruto CrewAI: {crew_result_str}")
+        # Extraer campos relevantes del string (puedes mejorar este parsing según el output esperado)
+        try:
+            result_json = json.loads(crew_result_str)
+        except Exception as e:
+            logger.error(f"❌ Error al parsear resultado CrewAI a JSON: {e}")
+            result_json = {"raw_result": crew_result_str}
+        status = result_json.get("status_geral", "Pendente")
+        # Guardar resultado en Supabase
+        await save_analysis_result(request.case_id, result_json)
+        logger.info("✅ Análise CrewAI concluída (modular)")
         return AnalysisResponse(
             case_id=request.case_id,
             status="completed",
-            analysis_result=analysis_result_dict,
-            message="Análise concluída com sucesso"
+            analysis_result=result_json,
+            message="Análise concluída com sucesso (modular)"
         )
-        
     except Exception as e:
-        error_msg = f"Erro na análise: {str(e)}"
-        logger.error(f"❌ {error_msg}")
-        return AnalysisResponse(
-            case_id=request.case_id,
-            status="error",
-            analysis_result={},  # Siempre dict vacío para evitar error de Pydantic
-            message=error_msg
-        )
+        logger.error(f"❌ Erro na análise modular: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erro na análise modular: {e}")
 
 # Endpoint síncrono para compatibilidad con servicio de ingestión
 @app.post("/analyze/sync", response_model=AnalysisResponse)
