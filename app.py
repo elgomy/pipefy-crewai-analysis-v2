@@ -288,20 +288,12 @@ async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) ->
         # --- Robustez extrema y logging ---
         logger.info(f"🧪 [save_analysis_result] Tipo de analysis_result: {type(analysis_result)} | Valor: {repr(analysis_result)}")
         import json
-        # Si no es dict, intentar parsear
+        import traceback
+        # Si no es dict, envolver en dict y loguear stacktrace
         if not isinstance(analysis_result, dict):
-            try:
-                analysis_result = json.loads(analysis_result)
-                logger.warning(f"⚠️ analysis_result recibido como str, convertido a dict (JSON)")
-            except Exception as e1:
-                # Intentar parsear reemplazando comillas simples por dobles
-                try:
-                    analysis_result_fixed = analysis_result.replace("'", '"')
-                    analysis_result = json.loads(analysis_result_fixed)
-                    logger.warning(f"⚠️ analysis_result convertido a dict tras reemplazar comillas simples por dobles")
-                except Exception as e2:
-                    logger.error(f"❌ analysis_result no es dict ni JSON válido: {e1} | {e2}. Valor: {analysis_result}")
-                    analysis_result = {}
+            logger.error(f"❌ analysis_result NO es dict en save_analysis_result. Valor: {repr(analysis_result)}")
+            logger.error(traceback.format_exc())
+            analysis_result = {"raw_result": analysis_result}
         # Solo llamar a .get si es dict
         if isinstance(analysis_result, dict):
             status_value = analysis_result.get("status_geral", "Pendente")
@@ -316,21 +308,19 @@ async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) ->
             "created_at": datetime.now().isoformat(),
             "service": "crewai_triagem_v2"
         }
-        
         # Inserir na tabela
         response = await asyncio.to_thread(
             supabase_client.table("informe_cadastro").upsert(data_to_insert, on_conflict="case_id").execute
         )
-        
         if hasattr(response, 'error') and response.error:
             logger.error(f"Erro ao salvar resultado: {response.error.message}")
             return False
-        
         logger.info(f"✅ Resultado da análise salvo para case_id: {case_id}")
         return True
-        
     except Exception as e:
         logger.error(f"Erro ao salvar resultado da análise: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 # Endpoint principal
