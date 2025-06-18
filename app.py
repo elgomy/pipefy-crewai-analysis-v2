@@ -249,6 +249,22 @@ def create_triagem_task_from_inputs(inputs: Dict[str, Any], agent: Agent) -> Tas
         context=[]
     )
 
+# --- SANITIZACIÓN DE PAYLOADS PARA SUPABASE ---
+
+INFORME_CADASTRO_FIELDS = {
+    "case_id",
+    "informe",
+    "status",
+    "created_at",
+    "updated_at"
+}
+
+def sanitize_informe_cadastro_payload(data: dict) -> dict:
+    """
+    Elimina cualquier clave no permitida del payload para informe_cadastro.
+    """
+    return {k: v for k, v in data.items() if k in INFORME_CADASTRO_FIELDS}
+
 # Função para salvar resultado no Supabase
 async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) -> bool:
     """Salva o resultado da análise na tabela informe_cadastro"""
@@ -260,26 +276,24 @@ async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) ->
         logger.info(f"🧪 [save_analysis_result] Tipo de analysis_result: {type(analysis_result)} | Valor: {repr(analysis_result)}")
         import json
         import traceback
-        # Si no es dict, envolver en dict y loguear stacktrace
         if not isinstance(analysis_result, dict):
             logger.error(f"❌ analysis_result NO es dict en save_analysis_result. Valor: {repr(analysis_result)}")
             logger.error(traceback.format_exc())
             analysis_result = {"raw_result": analysis_result}
-        # Solo llamar a .get si es dict
         if isinstance(analysis_result, dict):
             status_value = analysis_result.get("status_geral", "Pendente")
         else:
             logger.error(f"❌ analysis_result NO es dict tras todos los intentos. Valor final: {repr(analysis_result)}")
             status_value = "Pendente"
-        # Preparar datos para inserção
         data_to_insert = {
             "case_id": case_id,
             "informe": json.dumps(analysis_result, ensure_ascii=False, indent=2),
             "status": status_value,
             "created_at": datetime.now().isoformat(),
-            "service": "crewai_triagem_v2"
+            # "service": "crewai_triagem_v2"  # Eliminado: no existe en la tabla
         }
-        # Inserir na tabela
+        # Saneamiento defensivo
+        data_to_insert = sanitize_informe_cadastro_payload(data_to_insert)
         response = await asyncio.to_thread(
             supabase_client.table("informe_cadastro").upsert(data_to_insert, on_conflict="case_id").execute
         )
