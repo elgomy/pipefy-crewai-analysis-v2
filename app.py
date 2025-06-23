@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """
-Pipefy CrewAI Analysis Service v2.0
+Pipefy CrewAI Analysis Service v2.0 - ENFOQUE HÍBRIDO INTELIGENTE
 Servicio especializado en análisis de documentos usando triagem_agente
+
+ARQUITECTURA HÍBRIDA:
+- Este servicio se enfoca ÚNICAMENTE en el análisis con IA
+- Usa herramientas SIMPLES que llaman al backend para operaciones complejas
+- NO contiene lógica de APIs externas, solo análisis y razonamiento
 """
 
 import os
 import asyncio
 import logging
 import json
+import httpx
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 import re
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Header
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -36,8 +42,149 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# URL del backend (Document Ingestion Service)
+BACKEND_URL = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-v2.onrender.com")
+
 # Cliente Supabase global
 supabase_client: Optional[Client] = None
+
+# ============================================================================
+# HERRAMIENTAS SIMPLES QUE LLAMAN AL BACKEND
+# ============================================================================
+
+class EnriquecerClienteAPITool(BaseTool):
+    """
+    HERRAMIENTA SIMPLE: Enriquece datos de cliente con CNPJ
+    
+    El agente solo necesita saber:
+    "Para obtener todos los datos de un cliente, uso esta herramienta con el CNPJ"
+    
+    TODA la lógica compleja (CNPJá API, BrasilAPI, fallbacks, etc.) 
+    está en el backend, no aquí.
+    """
+    name: str = "enriquecer_cliente_api"
+    description: str = """
+    Enriquece los datos de un cliente usando su CNPJ.
+    Obtiene información completa de la empresa desde múltiples fuentes.
+    
+    Parámetros:
+    - cnpj: CNPJ de la empresa (solo números)
+    - case_id: ID del caso/card para asociar los datos
+    
+    Retorna: Información completa de la empresa o error si no se encuentra.
+    """
+    
+    def _run(self, cnpj: str, case_id: str) -> str:
+        """
+        Llama al backend para enriquecer datos de cliente.
+        Súper simple: solo hace la llamada HTTP.
+        """
+        try:
+            logger.info(f"🔍 Llamando al backend para enriquecer CNPJ: {cnpj}")
+            
+            # Preparar datos para el backend
+            payload = {
+                "cnpj": cnpj,
+                "case_id": case_id
+            }
+            
+            # Llamada HTTP simple al backend
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(
+                    f"{BACKEND_URL}/api/v1/cliente/enriquecer",
+                    json=payload
+                )
+                response.raise_for_status()
+                result = response.json()
+            
+            if result.get("success"):
+                logger.info(f"✅ Cliente enriquecido exitosamente: {cnpj}")
+                return f"Cliente enriquecido exitosamente. {result.get('message', '')}"
+            else:
+                logger.error(f"❌ Error al enriquecer cliente: {result.get('message')}")
+                return f"Error al enriquecer cliente: {result.get('message', 'Error desconocido')}"
+                
+        except httpx.TimeoutException:
+            error_msg = f"Timeout al enriquecer cliente {cnpj}. El backend tardó más de 60 segundos."
+            logger.error(error_msg)
+            return error_msg
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Error HTTP {e.response.status_code} al enriquecer cliente {cnpj}"
+            logger.error(error_msg)
+            return error_msg
+        except Exception as e:
+            error_msg = f"Error inesperado al enriquecer cliente {cnpj}: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
+
+class ObtenerDocumentosAPITool(BaseTool):
+    """
+    HERRAMIENTA SIMPLE: Obtiene documentos de un caso desde Supabase
+    
+    El agente solo necesita saber:
+    "Para obtener los documentos de un caso, uso esta herramienta con el case_id"
+    
+    TODA la lógica de Supabase está en el backend.
+    """
+    name: str = "obtener_documentos_api"
+    description: str = """
+    Obtiene la lista de documentos asociados a un caso específico.
+    
+    Parámetros:
+    - case_id: ID del caso/card del cual obtener documentos
+    
+    Retorna: Lista de documentos con sus URLs y metadatos.
+    """
+    
+    def _run(self, case_id: str) -> str:
+        """
+        Llama al backend para obtener documentos.
+        Súper simple: solo hace la llamada HTTP.
+        """
+        try:
+            logger.info(f"📄 Obteniendo documentos para case_id: {case_id}")
+            
+            # Llamada HTTP simple al backend
+            with httpx.Client(timeout=30.0) as client:
+                response = client.get(
+                    f"{BACKEND_URL}/api/v1/documentos/{case_id}"
+                )
+                response.raise_for_status()
+                result = response.json()
+            
+            if result.get("success"):
+                documents = result.get("documents", [])
+                logger.info(f"✅ Encontrados {len(documents)} documentos para case_id: {case_id}")
+                
+                if documents:
+                    doc_list = []
+                    for doc in documents:
+                        doc_info = f"- {doc.get('document_name', 'Sin nombre')} (Tag: {doc.get('document_tag', 'Sin tag')})"
+                        doc_list.append(doc_info)
+                    return f"Documentos encontrados para {case_id}:\n" + "\n".join(doc_list)
+                else:
+                    return f"No se encontraron documentos para el case_id: {case_id}"
+            else:
+                error_msg = f"Error al obtener documentos: {result.get('message', 'Error desconocido')}"
+                logger.error(error_msg)
+                return error_msg
+                
+        except httpx.TimeoutException:
+            error_msg = f"Timeout al obtener documentos para {case_id}"
+            logger.error(error_msg)
+            return error_msg
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Error HTTP {e.response.status_code} al obtener documentos para {case_id}"
+            logger.error(error_msg)
+            return error_msg
+        except Exception as e:
+            error_msg = f"Error inesperado al obtener documentos para {case_id}: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
+
+# ============================================================================
+# CONFIGURACIÓN DEL AGENTE ENFOCADO
+# ============================================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,7 +192,7 @@ async def lifespan(app: FastAPI):
     global supabase_client
     
     # Startup
-    logger.info("🤖 Iniciando Pipefy CrewAI Analysis Service v2.0...")
+    logger.info("🤖 Iniciando Pipefy CrewAI Analysis Service v2.0 - HÍBRIDO INTELIGENTE...")
     
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         logger.error("ERRO: Variáveis SUPABASE_URL e SUPABASE_ANON_KEY são obrigatórias.")
@@ -62,7 +209,8 @@ async def lifespan(app: FastAPI):
         logger.error(f"ERRO ao inicializar cliente Supabase: {e}")
         raise RuntimeError(f"Falha na inicialização do Supabase: {e}")
     
-    logger.info("🎯 Triagem Agent configurado e pronto para análise.")
+    logger.info(f"🔗 Backend configurado en: {BACKEND_URL}")
+    logger.info("🎯 Agente de Triagem configurado com herramientas híbridas.")
     
     yield
     
@@ -71,11 +219,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    title="Pipefy CrewAI Analysis Service v2.0",
-    description="Serviço especializado em análise de documentos usando triagem_agente"
+    title="Pipefy CrewAI Analysis Service v2.0 - Híbrido Inteligente",
+    description="Servicio de análisis especializado que usa herramientas simples para llamar al backend"
 )
 
-# Modelos Pydantic
+# ============================================================================
+# MODELOS PYDANTIC
+# ============================================================================
+
 class DocumentInfo(BaseModel):
     name: str
     file_url: str
@@ -93,19 +244,17 @@ class AnalysisResponse(BaseModel):
     analysis_result: Any  # Permitir cualquier tipo para evitar errores de validación
     message: str
 
-# Función para crear fonte de conhecimento FAQ.pdf
+# ============================================================================
+# CONFIGURACIÓN DEL AGENTE ENFOCADO
+# ============================================================================
+
 def create_faq_knowledge_source() -> PDFKnowledgeSource:
     """Cria a fonte de conhecimento baseada no FAQ.pdf"""
-    import os
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         logger.info(f"🏠 Directorio base: {base_dir}")
         
-        # SOLUCIÓN DEFINITIVA: PDFKnowledgeSource SIEMPRE prefixa "knowledge/"
-        # Por tanto, debemos darle SOLO el nombre del archivo, no la ruta completa
-        # Y el working directory debe ser el directorio que contiene "knowledge/"
-        
-        # Detectar si estamos en Render
+        # Detectar entorno y configurar path
         render_knowledge_path = "/opt/render/project/src/knowledge/FAQ.pdf"
         render_triagem_path = "/opt/render/project/src/triagem_crew/knowledge/FAQ.pdf"
         
@@ -114,58 +263,42 @@ def create_faq_knowledge_source() -> PDFKnowledgeSource:
         
         try:
             if os.path.exists(render_knowledge_path):
-                # Entorno Render - usar knowledge/ directo
-                logger.info("🌐 Detectado entorno Render - usando /opt/render/project/src/knowledge/")
                 os.chdir("/opt/render/project/src")
-                
-                # PDFKnowledgeSource buscará: knowledge/ + FAQ.pdf = knowledge/FAQ.pdf ✅
-                logger.info("🚀 Creando PDFKnowledgeSource con archivo: FAQ.pdf")
+                logger.info("🌐 Entorno Render - usando knowledge/")
                 faq_source = PDFKnowledgeSource(file_paths=["FAQ.pdf"])
-                logger.info("✅ FAQ.pdf cargado exitosamente desde directorio knowledge/")
+                logger.info("✅ FAQ.pdf cargado exitosamente")
                 return faq_source
                 
             elif os.path.exists(render_triagem_path):
-                # Entorno Render - usar triagem_crew/knowledge/
-                logger.info("🌐 Detectado entorno Render - usando /opt/render/project/src/triagem_crew/")
                 os.chdir("/opt/render/project/src/triagem_crew")
-                
-                # PDFKnowledgeSource buscará: knowledge/ + FAQ.pdf = knowledge/FAQ.pdf ✅
-                logger.info("🚀 Creando PDFKnowledgeSource con archivo: FAQ.pdf")
+                logger.info("🌐 Entorno Render - usando triagem_crew/knowledge/")
                 faq_source = PDFKnowledgeSource(file_paths=["FAQ.pdf"])
-                logger.info("✅ FAQ.pdf cargado exitosamente desde directorio triagem_crew/knowledge/")
+                logger.info("✅ FAQ.pdf cargado exitosamente")
                 return faq_source
             
-            # Entorno local/desarrollo
+            # Entorno local
             local_knowledge = os.path.join(base_dir, "knowledge", "FAQ.pdf")
             local_triagem = os.path.join(base_dir, "triagem_crew", "knowledge", "FAQ.pdf")
             
             if os.path.exists(local_knowledge):
-                logger.info("🏠 Entorno local - usando knowledge/ directo")
                 os.chdir(base_dir)
-                logger.info("🚀 Creando PDFKnowledgeSource con archivo: FAQ.pdf")
+                logger.info("🏠 Entorno local - usando knowledge/")
                 faq_source = PDFKnowledgeSource(file_paths=["FAQ.pdf"])
-                logger.info("✅ FAQ.pdf cargado exitosamente desde directorio local knowledge/")
+                logger.info("✅ FAQ.pdf cargado exitosamente")
                 return faq_source
                 
             elif os.path.exists(local_triagem):
-                logger.info("🏠 Entorno local - usando triagem_crew/knowledge/")
                 triagem_dir = os.path.join(base_dir, "triagem_crew")
                 os.chdir(triagem_dir)
-                logger.info("🚀 Creando PDFKnowledgeSource con archivo: FAQ.pdf")
+                logger.info("🏠 Entorno local - usando triagem_crew/knowledge/")
                 faq_source = PDFKnowledgeSource(file_paths=["FAQ.pdf"])
-                logger.info("✅ FAQ.pdf cargado exitosamente desde directorio local triagem_crew/knowledge/")
+                logger.info("✅ FAQ.pdf cargado exitosamente")
                 return faq_source
             
-            # Si llegamos aquí, no encontramos el archivo
-            logger.error(f"❌ FAQ.pdf no encontrado en ninguna ubicación conocida")
-            logger.error(f"   Verificado: {render_knowledge_path}")
-            logger.error(f"   Verificado: {render_triagem_path}")
-            logger.error(f"   Verificado: {local_knowledge}")
-            logger.error(f"   Verificado: {local_triagem}")
-            raise FileNotFoundError("FAQ.pdf not found in any expected location")
+            logger.error("❌ FAQ.pdf no encontrado en ninguna ubicación")
+            raise FileNotFoundError("FAQ.pdf not found")
             
         finally:
-            # Restaurar directorio original
             os.chdir(original_cwd)
             logger.info(f"🔄 Directorio restaurado a: {original_cwd}")
             
@@ -173,34 +306,13 @@ def create_faq_knowledge_source() -> PDFKnowledgeSource:
         logger.error(f"❌ Erro ao criar fonte de conhecimento FAQ.pdf: {e}")
         raise
 
-class SupabaseDocumentTool(BaseTool):
-    name: str = "supabase_document_tool"
-    description: str = "Acessa documentos armazenados no Supabase Storage"
-    
-    def _run(self, case_id: str) -> dict:
-        """Obtém informações dos documentos do Supabase"""
-        try:
-            if not supabase_client:
-                return {"error": "Cliente Supabase não disponível"}
-            # Consultar documentos na tabela
-            response = supabase_client.table("documents").select("*").eq("case_id", case_id).execute()
-            if response.data:
-                logger.info(f"📄 Encontrados {len(response.data)} documentos para case_id: {case_id}")
-                return {"documents": response.data}
-            else:
-                return {"documents": []}
-        except Exception as e:
-            logger.error(f"Erro ao acessar documentos: {e}")
-            return {"error": str(e)}
-
-# Função para carregar configurações YAML
 def load_agent_config() -> Dict[str, Any]:
     """Carrega a configuração do agente do arquivo YAML"""
     try:
         with open("triagem_crew/config/agents.yaml", "r", encoding="utf-8") as file:
             return yaml.safe_load(file)
     except Exception as e:
-        logger.error(f"Erro ao carregar agents.yaml: {e}")
+        logger.error(f"Erro ao carregar configuração do agente: {e}")
         raise
 
 def load_task_config() -> Dict[str, Any]:
@@ -209,233 +321,147 @@ def load_task_config() -> Dict[str, Any]:
         with open("triagem_crew/config/tasks.yaml", "r", encoding="utf-8") as file:
             return yaml.safe_load(file)
     except Exception as e:
-        logger.error(f"Erro ao carregar tasks.yaml: {e}")
+        logger.error(f"Erro ao carregar configuração das tarefas: {e}")
         raise
 
-# Función para crear el agente
 def create_triagem_agent() -> Agent:
-    """Cria o agente de triagem baseado na configuração YAML"""
-    config = load_agent_config()
-    agent_config = config["triagem_agente"]
-    
-    # Ferramentas disponíveis (FAQ.pdf se maneja a nivel de crew)
-    tools = [
-        SupabaseDocumentTool()
-    ]
-    
-    return Agent(
-        role=agent_config["role"],
-        goal=agent_config["goal"],
-        backstory=agent_config["backstory"],
-        verbose=agent_config.get("verbose", True),
-        allow_delegation=agent_config.get("allow_delegation", False),
-        max_iter=agent_config.get("max_iter", 3),
-        max_execution_time=agent_config.get("max_execution_time", 300),
-        tools=tools
-    )
-
-# Função para criar a tarefa
-def create_triagem_task_from_inputs(inputs: Dict[str, Any], agent: Agent) -> Task:
-    config = load_task_config()["tarefa_validacao_documental"]
-    # Formatear descripción con los datos de inputs (sin checklist)
-    description = config["description"].format(
-        case_id=inputs.get("case_id", ""),
-        documents=json.dumps(inputs.get("documents", []), ensure_ascii=False),
-        current_date=inputs.get("current_date", "")
-    )
-    return Task(
-        description=description,
-        expected_output=config["expected_output"],
-        agent=agent,
-        context=[]
-    )
-
-# --- SANITIZACIÓN DE PAYLOADS PARA SUPABASE ---
-
-INFORME_CADASTRO_FIELDS = {
-    "case_id",
-    "informe",
-    "status",
-    "created_at",
-    "updated_at"
-}
-
-def sanitize_informe_cadastro_payload(data: dict) -> dict:
-    """
-    Elimina cualquier clave no permitida del payload para informe_cadastro.
-    """
-    return {k: v for k, v in data.items() if k in INFORME_CADASTRO_FIELDS}
-
-def clean_json_string(raw: str) -> str:
-    """
-    Elimina backticks, saltos de línea y espacios innecesarios del string JSON.
-    """
-    if not isinstance(raw, str):
-        return raw
-    # Elimina triple backtick y espacios
-    cleaned = re.sub(r"^`{3,}\s*|\s*`{3,}$", "", raw.strip())
-    return cleaned.strip()
-
-# Função para salvar resultado no Supabase
-async def save_analysis_result(case_id: str, analysis_result: Dict[str, Any]) -> bool:
-    """Salva o resultado da análise na tabela informe_cadastro"""
+    """Cria o agente de triagem com herramientas híbridas simples"""
     try:
-        if not supabase_client:
-            logger.error("Cliente Supabase não disponível")
-            return False
-        logger.info(f"🧪 [save_analysis_result] Tipo de analysis_result: {type(analysis_result)} | Valor: {repr(analysis_result)}")
-        import json
-        import traceback
-        # Si analysis_result es string, limpiar y parsear
-        if isinstance(analysis_result, str):
-            try:
-                cleaned = clean_json_string(analysis_result)
-                analysis_result = json.loads(cleaned)
-            except Exception as e:
-                logger.error(f"❌ Error al limpiar/parsear analysis_result: {e}")
-                logger.error(traceback.format_exc())
-                analysis_result = {"raw_result": analysis_result}
-        elif not isinstance(analysis_result, dict):
-            logger.error(f"❌ analysis_result NO es dict en save_analysis_result. Valor: {repr(analysis_result)}")
-            logger.error(traceback.format_exc())
-            analysis_result = {"raw_result": analysis_result}
-        if isinstance(analysis_result, dict):
-            status_value = analysis_result.get("status_geral", "Pendente")
-        else:
-            logger.error(f"❌ analysis_result NO es dict tras todos los intentos. Valor final: {repr(analysis_result)}")
-            status_value = "Pendente"
-        data_to_insert = {
-            "case_id": case_id,
-            "informe": json.dumps(analysis_result, ensure_ascii=False, indent=2),
-            "status": status_value,
-            "created_at": datetime.now().isoformat(),
-        }
-        data_to_insert = sanitize_informe_cadastro_payload(data_to_insert)
-        response = await asyncio.to_thread(
-            supabase_client.table("informe_cadastro").upsert(data_to_insert, on_conflict="case_id").execute
+        agent_config = load_agent_config()
+        faq_source = create_faq_knowledge_source()
+        
+        # Herramientas simples que llaman al backend
+        tools = [
+            EnriquecerClienteAPITool(),
+            ObtenerDocumentosAPITool()
+        ]
+        
+        return Agent(
+            role=agent_config["triagem_agent"]["role"],
+            goal=agent_config["triagem_agent"]["goal"],
+            backstory=agent_config["triagem_agent"]["backstory"],
+            tools=tools,
+            knowledge_sources=[faq_source],
+            verbose=True,
+            allow_delegation=False
         )
-        if hasattr(response, 'error') and response.error:
-            logger.error(f"Erro ao salvar resultado: {response.error.message}")
-            return False
-        logger.info(f"✅ Resultado da análise salvo para case_id: {case_id}")
-        return True
     except Exception as e:
-        logger.error(f"Erro ao salvar resultado da análise: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return False
+        logger.error(f"Erro ao criar agente de triagem: {e}")
+        raise
 
-class TriagemCrew:
-    """
-    Orquesta la ejecución de CrewAI para triagem documental, replicando la lógica modular.
-    """
-    def __init__(self, inputs: Dict[str, Any]):
-        self.inputs = inputs
+def create_triagem_task_from_inputs(inputs: Dict[str, Any], agent: Agent) -> Task:
+    """Cria a tarefa de triagem baseada nos inputs"""
+    try:
+        task_config = load_task_config()
+        
+        return Task(
+            description=task_config["triagem_task"]["description"].format(**inputs),
+            expected_output=task_config["triagem_task"]["expected_output"],
+            agent=agent
+        )
+    except Exception as e:
+        logger.error(f"Erro ao criar tarefa de triagem: {e}")
+        raise
 
-    def run(self) -> str:
-        logger.info(f"[TriagemCrew] Inputs recibidos: {self.inputs}")
-        # Crear fuente de conocimiento
-        faq_knowledge = create_faq_knowledge_source()
-        # Crear agente
+# ============================================================================
+# ENDPOINTS PRINCIPALES
+# ============================================================================
+
+@app.post("/analyze", response_model=AnalysisResponse)
+async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
+    """
+    Endpoint principal para análisis de documentos.
+    ENFOQUE HÍBRIDO: Solo hace análisis, las operaciones complejas las hace el backend.
+    """
+    try:
+        logger.info(f"🔍 Iniciando análisis para case_id: {request.case_id}")
+        
+        # Preparar inputs para el agente
+        inputs = {
+            "case_id": request.case_id,
+            "documents": [doc.dict() for doc in request.documents],
+            "current_date": request.current_date,
+            "pipe_id": request.pipe_id or "default"
+        }
+        
+        # Crear agente y tarea
         agent = create_triagem_agent()
-        # Crear tarea (usar solo la versión que acepta dict)
-        task = create_triagem_task_from_inputs(self.inputs, agent)
-        # Crear crew
+        task = create_triagem_task_from_inputs(inputs, agent)
+        
+        # Ejecutar crew
         crew = Crew(
             agents=[agent],
             tasks=[task],
             process=Process.sequential,
-            verbose=True,
-            knowledge_sources=[faq_knowledge]
+            verbose=True
         )
-        logger.info("[TriagemCrew] Ejecutando CrewAI...")
-        result = crew.kickoff(inputs=self.inputs)
-        logger.info(f"[TriagemCrew] Resultado bruto de CrewAI: {repr(result)}")
-        return str(result)
-
-# Endpoint principal
-@app.post("/analyze", response_model=AnalysisResponse)
-async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
-    """Analisa documentos usando CrewAI (lógica modular)"""
-    try:
-        logger.info(f"🚀 Iniciando análise para case_id: {request.case_id}")
-        inputs = {
-            "case_id": request.case_id,
-            "documents": [doc.dict() for doc in request.documents],
-            "current_date": datetime.now().strftime('%Y-%m-%d')
-        }
-        crew_runner = TriagemCrew(inputs)
-        crew_result_str = crew_runner.run()
-        logger.info(f"[POST /analyze] Resultado bruto CrewAI: {crew_result_str}")
-        try:
-            logger.info(f"[POST /analyze] Antes de limpieza: {repr(crew_result_str)}")
-            cleaned_result = clean_json_string(crew_result_str)
-            logger.info(f"[POST /analyze] Después de limpieza: {repr(cleaned_result)}")
-            result_json = json.loads(cleaned_result)
-        except Exception as e:
-            logger.error(f"❌ Error al parsear resultado CrewAI a JSON: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            result_json = {"raw_result": crew_result_str}
-        status = result_json.get("status_geral", "Pendente")
-        await save_analysis_result(request.case_id, result_json)
-        logger.info("✅ Análise CrewAI concluída (modular)")
+        
+        # Ejecutar análisis
+        result = crew.kickoff(inputs=inputs)
+        
+        logger.info(f"✅ Análisis completado para case_id: {request.case_id}")
+        
         return AnalysisResponse(
+            status="success",
             case_id=request.case_id,
-            status="completed",
-            analysis_result=result_json,
-            message="Análise concluída com sucesso (modular)"
+            analysis_result=result,
+            message="Análisis completado exitosamente"
         )
+        
     except Exception as e:
-        logger.error(f"❌ Erro na análise modular: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Erro na análise modular: {e}")
+        logger.error(f"❌ Error en análisis para case_id {request.case_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en análisis para case_id {request.case_id}: {str(e)}"
+        )
 
-# Endpoint síncrono para compatibilidad con servicio de ingestión
-@app.post("/analyze/sync", response_model=AnalysisResponse)
-async def analyze_documents_sync(request: AnalysisRequest) -> AnalysisResponse:
-    """
-    Endpoint síncrono para análisis de documentos - Compatible con servicio de ingestión
-    Idéntico al endpoint /analyze pero con ruta /analyze/sync para compatibilidad
-    """
-    return await analyze_documents(request)
-
-# Endpoints auxiliares
 @app.get("/")
 async def root():
-    """Endpoint raiz com informações do serviço"""
+    """Endpoint raíz del servicio"""
     return {
         "service": "Pipefy CrewAI Analysis Service v2.0",
         "status": "running",
-        "agent": "triagem_agente",
-        "description": "Serviço especializado em análise de documentos de triagem"
+        "architecture": "Enfoque Híbrido Inteligente",
+        "description": "Servicio de análisis especializado con herramientas simples",
+        "backend_url": BACKEND_URL
     }
 
 @app.get("/health")
 async def health_check():
-    """Endpoint de health check"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "service": "crewai_analysis_v2"
-    }
-
-@app.get("/config")
-async def get_config():
-    """Endpoint para verificar configuração do agente"""
+    """Health check del servicio"""
     try:
-        agent_config = load_agent_config()
-        task_config = load_task_config()
+        # Verificar conexión a Supabase
+        if supabase_client:
+            test_response = supabase_client.table("documents").select("count", count="exact").limit(1).execute()
+            supabase_status = "connected"
+        else:
+            supabase_status = "disconnected"
+        
+        # Verificar conexión al backend
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                backend_response = client.get(f"{BACKEND_URL}/health")
+                backend_status = "connected" if backend_response.status_code == 200 else "error"
+        except:
+            backend_status = "disconnected"
         
         return {
-            "agent_config": agent_config,
-            "task_config": task_config,
-            "status": "config_loaded"
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "services": {
+                "supabase": supabase_status,
+                "backend": backend_status,
+                "backend_url": BACKEND_URL
+            }
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao carregar configuração: {str(e)}")
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000))) 
