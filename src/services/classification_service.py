@@ -142,10 +142,14 @@ class ClassificationService:
             if is_present:
                 # Validar fecha si aplica
                 if "expiry_date" in doc_data and doc_rules.get("validate_expiry", False):
-                    expiry_date = datetime.fromisoformat(doc_data["expiry_date"])
-                    if expiry_date < datetime.now():
+                    try:
+                        expiry_date = datetime.fromisoformat(doc_data["expiry_date"])
+                        if expiry_date < datetime.now():
+                            is_valid = False
+                            issues.append(f"Documento {doc_type} está expirado")
+                    except ValueError:
                         is_valid = False
-                        issues.append(f"Documento {doc_type} está expirado")
+                        issues.append(f"Documento {doc_type} tiene formato de fecha inválido: {doc_data['expiry_date']}")
                 
                 # Validar campos requeridos
                 for field in doc_rules.get("required_fields", []):
