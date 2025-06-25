@@ -1,4 +1,4 @@
-tarefa_validacao_documental:
+triagem_task:
   description: |
     Para o caso '{case_id}', analise todos os documentos em '{documents}'.
     Use seu conhecimento de fundo do 'FAQ.pdf' para refinar sua análise.
