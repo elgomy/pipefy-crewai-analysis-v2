@@ -401,10 +401,62 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
         
         logger.info(f"✅ Análisis completado para case_id: {request.case_id}")
         
+        # Procesar resultado del crew para extraer JSON estructurado
+        crew_output = str(result) if result else ""
+        
+        # Intentar extraer JSON del resultado
+        structured_response = None
+        try:
+            # Buscar JSON en el resultado del crew
+            import json
+            import re
+            
+            # Buscar patrones JSON en el texto
+            json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+            json_matches = re.findall(json_pattern, crew_output)
+            
+            for match in json_matches:
+                try:
+                    parsed_json = json.loads(match)
+                    if isinstance(parsed_json, dict) and ('classificacao' in parsed_json or 'classification' in parsed_json):
+                        structured_response = parsed_json
+                        logger.info(f"🎯 JSON estruturado extraído: {structured_response}")
+                        break
+                except:
+                    continue
+                    
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo extraer JSON estructurado: {e}")
+        
+        # Preparar respuesta compatible con servicio de ingestión
+        analysis_result = {
+            "summary_report": crew_output,
+            "structured_response": structured_response,
+            "risk_score": "Medium",  # Default
+            "documents_analyzed": len(request.documents)
+        }
+        
+        # Guardar en Supabase (tabla informe_cadastro)
+        try:
+            informe_data = {
+                "case_id": request.case_id,
+                "informe": crew_output,
+                "risk_score": "Medium",
+                "summary_report": crew_output[:1000] if len(crew_output) > 1000 else crew_output,
+                "documents_analyzed": len(request.documents),
+                "analysis_details": structured_response if structured_response else {}
+            }
+            
+            supabase_client.table("informe_cadastro").insert(informe_data).execute()
+            logger.info(f"💾 Informe guardado en Supabase tabla informe_cadastro para case_id: {request.case_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error guardando informe en Supabase: {e}")
+        
         return AnalysisResponse(
-            status="success",
+            status="completed",  # Cambio: usar "completed" en lugar de "success"
             case_id=request.case_id,
-            analysis_result=result,
+            analysis_result=analysis_result,  # Cambio: usar estructura compatible
             message="Análisis completado exitosamente"
         )
         
