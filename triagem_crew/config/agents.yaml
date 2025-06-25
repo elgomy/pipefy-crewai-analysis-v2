@@ -1,4 +1,4 @@
-triagem_agente:
+triagem_agent:
   role: "Especialista em Conformidade Documental"
   goal: |
     Validar rigorosamente toda a documentação de cadastro contra o checklist fornecido e a base de conhecimento (FAQ.pdf). 
