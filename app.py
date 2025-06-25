@@ -418,7 +418,13 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
             for match in json_matches:
                 try:
                     parsed_json = json.loads(match)
-                    if isinstance(parsed_json, dict) and ('classificacao' in parsed_json or 'classification' in parsed_json):
+                    # Buscar JSON válido con campos esperados del análisis
+                    if isinstance(parsed_json, dict) and (
+                        'classificacao' in parsed_json or 
+                        'classification' in parsed_json or
+                        'status_geral' in parsed_json or
+                        'case_id' in parsed_json
+                    ):
                         structured_response = parsed_json
                         logger.info(f"🎯 JSON estruturado extraído: {structured_response}")
                         break
