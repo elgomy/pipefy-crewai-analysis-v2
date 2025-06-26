@@ -4,11 +4,21 @@ triagem_task:
     Use seu conhecimento de fundo do 'FAQ.pdf' para refinar sua análise.
     
     INSTRUÇÕES ESPECÍFICAS:
-    1. Valide cada documento fornecido
+    1. Valide cada documento fornecido contra a lista de documentos OBRIGATÓRIOS
     2. Consulte o FAQ.pdf para casos especiais e exceções
-    3. Determine o status geral do caso: 'Pendencia_Bloqueante', 'Pendencia_NaoBloqueante', ou 'Aprovado'
-    4. Crie uma lista detalhada de ações requeridas para as pendências encontradas
-    5. Classifique cada pendência como 'Bloqueante' ou 'NaoBloqueante'
+    3. VERIFIQUE SE TODOS os documentos obrigatórios estão presentes:
+       - Contrato Social
+       - Cartão CNPJ (se não estiver presente, identifique o CNPJ para geração automática)
+       - Comprovante de endereço
+       - Documentos dos sócios
+    4. Se faltar Cartão CNPJ, IDENTIFIQUE o CNPJ da empresa no texto dos documentos
+    5. QUANDO DETECTAR CNPJ SEM CARTÃO ATUALIZADO: Use a ferramenta 'enriquecer_cliente_api' 
+       para gerar automaticamente o cartão CNPJ através da API da Receita Federal
+    6. Use as ferramentas disponíveis para enriquecer dados quando necessário
+    7. Determine o status geral do caso: 'Pendencia_Bloqueante', 'Pendencia_NaoBloqueante', ou 'Aprovado'
+    8. Crie uma lista detalhada de ações requeridas para as pendências encontradas
+    9. Classifique cada pendência como 'Bloqueante' ou 'NaoBloqueante'
+    10. Para pendências de CNPJ, SEMPRE inclua o número do CNPJ extraído dos documentos
     
     CRITÉRIOS DE ANÁLISE:
     - Pendência Bloqueante: Impede a aprovação do cadastro (documentos obrigatórios ausentes, informações incorretas críticas)
@@ -81,6 +91,7 @@ triagem_task:
   tools:
     - knowledge_base_query_tool
     - supabase_document_tool
+    - enriquecer_cliente_api
   context: |
     Você está analisando documentos de cadastro para validação de conformidade.
     Use o FAQ.pdf como sua principal fonte de regras e exceções.
