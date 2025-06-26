@@ -43,7 +43,7 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # URL del backend (Document Ingestion Service)
-BACKEND_URL = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-v2.onrender.com")
+BACKEND_URL = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-modular.onrender.com")
 
 # Cliente Supabase global
 supabase_client: Optional[Client] = None

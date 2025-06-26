@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 # URL del backend (Document Ingestion Service)
-BACKEND_URL = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-v2.onrender.com")
+BACKEND_URL = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-modular.onrender.com")
 
 class EnriquecerClienteAPITool(BaseTool):
     """

@@ -35,7 +35,7 @@ class Settings:
     PROCESSING_TIMEOUT: int = int(os.getenv("PROCESSING_TIMEOUT", "300"))
     
     # Document Ingestion Configuration
-    DOCUMENT_INGESTION_URL: str = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-v2.onrender.com")
+    DOCUMENT_INGESTION_URL: str = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-modular.onrender.com")
     
     @classmethod
     def validate_required_vars(cls) -> list[str]:
