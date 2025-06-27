@@ -436,7 +436,7 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
         
         # Preparar respuesta compatible con servicio de ingestión
         analysis_result = {
-            "summary_report": crew_output,
+            "informe": crew_output,
             "structured_response": structured_response,
             "risk_score": "Medium",  # Default
             "documents_analyzed": len(request.documents)
@@ -448,7 +448,6 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
                 "case_id": request.case_id,
                 "informe": crew_output,
                 "risk_score": "Medium",
-                "summary_report": crew_output[:1000] if len(crew_output) > 1000 else crew_output,
                 "documents_analyzed": len(request.documents),
                 "analysis_details": structured_response if structured_response else {}
             }
