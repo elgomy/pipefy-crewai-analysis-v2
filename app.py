@@ -257,88 +257,49 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
             "current_date": request.current_date,
             "pipe_id": request.pipe_id or "default"
         }
-        
-        # Crear agente y tarea
-        agent = create_triagem_agent()
-        task = create_triagem_task_from_inputs(inputs, agent)
-        
-        # Ejecutar crew
-        crew = Crew(
-            agents=[agent],
-            tasks=[task],
-            process=Process.sequential,
-            verbose=True
-        )
-        
-        # Ejecutar análisis
-        result = crew.kickoff(inputs=inputs)
-        
+        # Extraer cnpj del card (siempre disponible)
+        cnpj_value = None
+        if hasattr(request, 'cnpj'):
+            cnpj_value = request.cnpj
+        else:
+            # Buscar en los documentos si alguno tiene el campo cnpj
+            for doc in request.documents:
+                if hasattr(doc, 'cnpj'):
+                    cnpj_value = doc.cnpj
+                    break
+        card_data = {"cnpj": cnpj_value} if cnpj_value else {}
+        # Mapear documentos por tag
+        documents_by_tag = {doc.document_tag: doc.dict() for doc in request.documents}
+        # Llamar al servicio de clasificación robusto
+        from src.services.classification_service import classification_service
+        result = classification_service.classify_documents(documents_by_tag, card_data, request.case_id)
         logger.info(f"✅ Análisis completado para case_id: {request.case_id}")
-        
-        # Procesar resultado del crew para extraer JSON estructurado
-        crew_output = str(result) if result else ""
-        
-        # Intentar extraer JSON del resultado
-        structured_response = None
-        try:
-            # Buscar JSON en el resultado del crew
-            import json
-            import re
-            
-            # Buscar patrones JSON en el texto
-            json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
-            json_matches = re.findall(json_pattern, crew_output)
-            
-            for match in json_matches:
-                try:
-                    parsed_json = json.loads(match)
-                    # Buscar JSON válido con campos esperados del análisis
-                    if isinstance(parsed_json, dict) and (
-                        'classificacao' in parsed_json or 
-                        'classification' in parsed_json or
-                        'status_geral' in parsed_json or
-                        'case_id' in parsed_json
-                    ):
-                        structured_response = parsed_json
-                        logger.info(f"🎯 JSON estruturado extraído: {structured_response}")
-                        break
-                except:
-                    continue
-                    
-        except Exception as e:
-            logger.warning(f"⚠️ No se pudo extraer JSON estructurado: {e}")
-        
-        # Preparar respuesta compatible con servicio de ingestión
+        # Preparar respuesta compatible
         analysis_result = {
-            "informe": crew_output,
-            "structured_response": structured_response,
-            "risk_score": "Medium",  # Default
+            "informe": result.summary,
+            "structured_response": result.classification_type.value,
+            "risk_score": result.confidence_score,
             "documents_analyzed": len(request.documents)
         }
-        
         # Guardar en Supabase (tabla informe_cadastro)
         try:
             informe_data = {
                 "case_id": request.case_id,
-                "informe": crew_output,
-                "risk_score": "Medium",
+                "informe": result.summary,
+                "risk_score": result.confidence_score,
                 "documents_analyzed": len(request.documents),
-                "analysis_details": structured_response if structured_response else {}
+                "analysis_details": result.classification_type.value
             }
-            
             supabase_client.table("informe_cadastro").insert(informe_data).execute()
             logger.info(f"💾 Informe guardado en Supabase tabla informe_cadastro para case_id: {request.case_id}")
-            
         except Exception as e:
             logger.error(f"❌ Error guardando informe en Supabase: {e}")
-        
         return AnalysisResponse(
-            status="completed",  # Cambio: usar "completed" en lugar de "success"
+            status="completed",
             case_id=request.case_id,
-            analysis_result=analysis_result,  # Cambio: usar estructura compatible
+            analysis_result=analysis_result,
             message="Análisis completado exitosamente"
         )
-        
     except Exception as e:
         logger.error(f"❌ Error en análisis para case_id {request.case_id}: {e}")
         raise HTTPException(

@@ -65,29 +65,47 @@ class ClassificationService:
             logger.error(f"❌ Error cargando reglas del FAQ: {e}")
             self._rules = {}
     
-    def classify_documents(self, documents_data: Dict[str, Any]) -> ClassificationResult:
+    def classify_documents(self, documents_data: Dict[str, Any], card_data: Dict[str, Any], case_id: str) -> ClassificationResult:
         """
-        Clasifica un conjunto de documentos según las reglas del FAQ v2.0.
-        
+        Clasifica un conjunto de documentos según las reglas del FAQ v2.0, validando exhaustivamente y enriqueciendo si falta Cartão CNPJ.
         Args:
-            documents_data: Datos de los documentos a clasificar
-            
+            documents_data: Dict con los documentos presentes (tag -> datos)
+            card_data: Dict con los campos del card de Pipefy (incluye 'cnpj')
+            case_id: ID del caso/card
         Returns:
             ClassificationResult: Resultado de la clasificación
         """
         try:
-            # Analizar cada documento
+            logger.info(f"🔍 Consultando reglas de documentos en FAQ.pdf...")
+            required_docs = self._rules["documents"].keys()
+            logger.info(f"📋 Documentos requeridos según FAQ: {list(required_docs)}")
+            # Validar presencia de todos los documentos requeridos
             document_analyses = []
-            for doc_type, doc_data in documents_data.items():
+            docs_present = set(documents_data.keys())
+            for doc_type in required_docs:
+                doc_data = documents_data.get(doc_type, {})
                 analysis = self._analyze_document(doc_type, doc_data)
                 document_analyses.append(analysis)
-            
+                logger.info(f"🔎 Documento '{doc_type}': presente={analysis.is_present}, válido={analysis.is_valid}, issues={analysis.issues}")
+            # Enriquecimiento automático si falta Cartão CNPJ
+            cartao_cnpj_tag = "cartao_cnpj"
+            cartao_cnpj_analysis = next((a for a in document_analyses if a.document_type == cartao_cnpj_tag), None)
+            if cartao_cnpj_analysis and not cartao_cnpj_analysis.is_present:
+                logger.info(f"⚠️ Falta Cartão CNPJ. Intentando enriquecer usando EnriquecerClienteAPITool...")
+                cnpj_raw = card_data.get("cnpj", "")
+                cnpj_clean = ''.join(filter(str.isdigit, str(cnpj_raw)))
+                logger.info(f"🔢 CNPJ extraído del card: '{cnpj_raw}' → normalizado: '{cnpj_clean}'")
+                if cnpj_clean and len(cnpj_clean) == 14:
+                    from src.tools.backend_api_tools import EnriquecerClienteAPITool
+                    tool = EnriquecerClienteAPITool()
+                    enrich_result = tool._run(cnpj_clean, case_id)
+                    logger.info(f"🛠️ Resultado de EnriquecerClienteAPITool: {enrich_result}")
+                else:
+                    logger.warning(f"❌ CNPJ no válido o ausente en el card: '{cnpj_raw}'")
             # Determinar clasificación general
             classification_type = self._determine_classification(document_analyses)
-            
             # Identificar issues
             blocking_issues, non_blocking_issues = self._identify_issues(document_analyses)
-            
             # Determinar acciones automáticas
             auto_actions = self._determine_auto_actions(
                 classification_type,
@@ -95,10 +113,8 @@ class ClassificationService:
                 blocking_issues,
                 non_blocking_issues
             )
-            
             # Calcular score de confianza
             confidence_score = self._calculate_confidence_score(document_analyses)
-            
             # Generar resumen
             summary = self._generate_summary(
                 classification_type,
@@ -107,7 +123,7 @@ class ClassificationService:
                 non_blocking_issues,
                 auto_actions
             )
-            
+            logger.info(f"📄 Resumen de análisis:\n{summary}")
             return ClassificationResult(
                 classification_type=classification_type,
                 document_analyses=document_analyses,
@@ -117,7 +133,6 @@ class ClassificationService:
                 auto_actions=auto_actions,
                 summary=summary
             )
-            
         except Exception as e:
             logger.error(f"❌ Error en clasificación de documentos: {e}")
             raise
