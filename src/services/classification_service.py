@@ -123,22 +123,18 @@ class ClassificationService:
             raise
     
     def _analyze_document(self, doc_type: str, doc_data: Dict[str, Any]) -> DocumentAnalysis:
-        """Analiza un documento específico según las reglas del FAQ."""
+        """Analiza un documento específico según las reglas del FAQ, usando parsed_content."""
         try:
-            # Obtener reglas para este tipo de documento
             doc_rules = self._rules["documents"].get(doc_type, {})
-            
-            # Validar documento
             is_valid = True
             issues = []
-            
-            # Verificar presencia
-            is_present = doc_data.get("is_present", False)
+            # Verificar presencia usando parsed_content
+            parsed_content = doc_data.get("parsed_content", "")
+            is_present = bool(parsed_content and parsed_content.strip())
             if not is_present and doc_rules.get("required", True):
                 is_valid = False
-                issues.append(f"Documento {doc_type} es requerido pero no está presente")
-            
-            # Si está presente, validar según reglas
+                issues.append(f"Documento {doc_type} es requerido pero no tiene contenido parseado ('parsed_content')")
+            # Si está presente, validar según reglas (puedes agregar aquí lógica de validación sobre el texto)
             if is_present:
                 # Validar fecha si aplica
                 if "expiry_date" in doc_data and doc_rules.get("validate_expiry", False):
@@ -150,16 +146,12 @@ class ClassificationService:
                     except ValueError:
                         is_valid = False
                         issues.append(f"Documento {doc_type} tiene formato de fecha inválido: {doc_data['expiry_date']}")
-                
-                # Validar campos requeridos
+                # Validar campos requeridos (puedes hacer validaciones sobre el texto de parsed_content aquí)
                 for field in doc_rules.get("required_fields", []):
                     if field not in doc_data or not doc_data[field]:
                         is_valid = False
                         issues.append(f"Campo requerido '{field}' faltante en {doc_type}")
-            
-            # Calcular score de confianza
             confidence_score = 1.0 if is_valid and is_present else 0.5
-            
             return DocumentAnalysis(
                 document_type=doc_type,
                 is_valid=is_valid,
@@ -168,7 +160,6 @@ class ClassificationService:
                 confidence_score=confidence_score,
                 metadata=doc_data
             )
-            
         except Exception as e:
             logger.error(f"❌ Error analizando documento {doc_type}: {e}")
             raise

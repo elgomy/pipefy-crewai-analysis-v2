@@ -103,6 +103,7 @@ class DocumentInfo(BaseModel):
     name: str
     file_url: str
     document_tag: str
+    parsed_content: str = Field(..., description="Texto extraído del PDF por LlamaParse")
 
 class AnalysisRequest(BaseModel):
     case_id: str = Field(..., description="ID do case/card do Pipefy")
@@ -241,11 +242,14 @@ def create_triagem_task_from_inputs(inputs: Dict[str, Any], agent: Agent) -> Tas
 async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
     """
     Endpoint principal para análisis de documentos.
-    ENFOQUE HÍBRIDO: Solo hace análisis, las operaciones complejas las hace el backend.
+    Ahora analiza el campo 'parsed_content' de cada documento, no la URL.
     """
     try:
         logger.info(f"🔍 Iniciando análisis para case_id: {request.case_id}")
-        
+        # Validar que todos los documentos tengan parsed_content
+        for doc in request.documents:
+            if not getattr(doc, 'parsed_content', None):
+                raise HTTPException(status_code=400, detail=f"El documento '{doc.name}' no tiene contenido parseado ('parsed_content')")
         # Preparar inputs para el agente
         inputs = {
             "case_id": request.case_id,
