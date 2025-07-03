@@ -20,6 +20,92 @@ logger = logging.getLogger(__name__)
 # URL del backend (Document Ingestion Service)
 BACKEND_URL = os.getenv("DOCUMENT_INGESTION_URL", "https://pipefy-document-ingestion-modular.onrender.com")
 
+class ObtenerDocumentosConContenidoAPITool(BaseTool):
+    """
+    HERRAMIENTA ULTRA-SIMPLE: Obtiene documentos con contenido parseado automáticamente
+    
+    BRILLANTE SIMPLIFICACIÓN: Los documentos YA están parseados cuando se suben.
+    Solo necesitamos consultar la tabla documents existente que ya tiene todo.
+    
+    ¡No necesitamos endpoints de parseo porque ya está integrado en el flujo de subida!
+    """
+    name: str = "obtener_documentos_con_contenido_api"
+    description: str = """
+    Obtiene documentos de un caso CON su contenido parseado automáticamente.
+    Los documentos se parsean automáticamente al subirlos, así que aquí solo consultamos.
+    
+    Parámetros:
+    - case_id: ID del caso/card cuyos documentos obtener
+    - include_content: Si incluir el contenido parseado completo (default: true)
+    
+    Retorna: Lista de documentos con URLs, metadatos Y contenido parseado listo para análisis.
+    """
+    
+    def _run(self, case_id: str, include_content: bool = True) -> str:
+        """
+        Consulta la tabla documents que YA TIENE el contenido parseado.
+        Ultra-simple: solo una consulta a Supabase.
+        """
+        try:
+            logger.info(f"📄 Obteniendo documentos con contenido para case_id: {case_id}")
+            
+            # Llamada HTTP simple al backend que consulta tabla documents
+            with httpx.Client(timeout=30.0) as client:
+                params = {"include_content": include_content}
+                response = client.get(
+                    f"{BACKEND_URL}/api/v1/documentos/{case_id}",
+                    params=params
+                )
+                response.raise_for_status()
+                result = response.json()
+            
+            if result.get("success"):
+                documents = result.get("documents", [])
+                logger.info(f"✅ Encontrados {len(documents)} documentos con contenido para case_id: {case_id}")
+                
+                if documents:
+                    doc_summaries = []
+                    for doc in documents:
+                        name = doc.get('name', 'Sin nombre')
+                        doc_type = doc.get('document_tag', 'Sin tipo')
+                        parsing_status = doc.get('parsing_status', 'unknown')
+                        
+                        if parsing_status == 'completed':
+                            content_length = len(doc.get('parsed_content', ''))
+                            confidence = doc.get('confidence_score', 0.0)
+                            doc_summaries.append(
+                                f"- {name} ({doc_type}): ✅ {content_length} caracteres parseados (Confianza: {confidence:.2f})"
+                            )
+                            
+                            # Si incluir contenido, añadirlo para análisis
+                            if include_content and doc.get('parsed_content'):
+                                doc_summaries.append(f"  CONTENIDO: {doc['parsed_content'][:500]}..." if len(doc['parsed_content']) > 500 else f"  CONTENIDO: {doc['parsed_content']}")
+                        else:
+                            doc_summaries.append(f"- {name} ({doc_type}): ❌ Parseo falló o pendiente")
+                    
+                    return f"Documentos con contenido para {case_id}:\n" + "\n".join(doc_summaries)
+                else:
+                    return f"No se encontraron documentos para el case_id: {case_id}"
+            else:
+                error_msg = f"Error al obtener documentos: {result.get('message', 'Error desconocido')}"
+                logger.error(error_msg)
+                return error_msg
+                
+        except httpx.TimeoutException:
+            error_msg = f"Timeout al obtener documentos para {case_id}"
+            logger.error(error_msg)
+            return error_msg
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Error HTTP {e.response.status_code} al obtener documentos para {case_id}"
+            logger.error(error_msg)
+            return error_msg
+        except Exception as e:
+            error_msg = f"Error inesperado al obtener documentos para {case_id}: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
+
+
+
 class EnriquecerClienteAPITool(BaseTool):
     """
     HERRAMIENTA SIMPLE: Enriquece datos de cliente con CNPJ
@@ -85,70 +171,7 @@ class EnriquecerClienteAPITool(BaseTool):
             logger.error(error_msg)
             return error_msg
 
-class ObtenerDocumentosAPITool(BaseTool):
-    """
-    HERRAMIENTA SIMPLE: Obtiene documentos de un caso desde Supabase
-    
-    El agente solo necesita saber:
-    "Para obtener los documentos de un caso, uso esta herramienta con el case_id"
-    
-    TODA la lógica de Supabase está en el backend.
-    """
-    name: str = "obtener_documentos_api"
-    description: str = """
-    Obtiene la lista de documentos asociados a un caso específico.
-    
-    Parámetros:
-    - case_id: ID del caso/card del cual obtener documentos
-    
-    Retorna: Lista de documentos con sus URLs y metadatos.
-    """
-    
-    def _run(self, case_id: str) -> str:
-        """
-        Llama al backend para obtener documentos.
-        Súper simple: solo hace la llamada HTTP.
-        """
-        try:
-            logger.info(f"📄 Obteniendo documentos para case_id: {case_id}")
-            
-            # Llamada HTTP simple al backend
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(
-                    f"{BACKEND_URL}/api/v1/documentos/{case_id}"
-                )
-                response.raise_for_status()
-                result = response.json()
-            
-            if result.get("success"):
-                documents = result.get("documents", [])
-                logger.info(f"✅ Encontrados {len(documents)} documentos para case_id: {case_id}")
-                
-                if documents:
-                    doc_list = []
-                    for doc in documents:
-                        doc_info = f"- {doc.get('document_name', 'Sin nombre')} (Tag: {doc.get('document_tag', 'Sin tag')})"
-                        doc_list.append(doc_info)
-                    return f"Documentos encontrados para {case_id}:\n" + "\n".join(doc_list)
-                else:
-                    return f"No se encontraron documentos para el case_id: {case_id}"
-            else:
-                error_msg = f"Error al obtener documentos: {result.get('message', 'Error desconocido')}"
-                logger.error(error_msg)
-                return error_msg
-                
-        except httpx.TimeoutException:
-            error_msg = f"Timeout al obtener documentos para {case_id}"
-            logger.error(error_msg)
-            return error_msg
-        except httpx.HTTPStatusError as e:
-            error_msg = f"Error HTTP {e.response.status_code} al obtener documentos para {case_id}"
-            logger.error(error_msg)
-            return error_msg
-        except Exception as e:
-            error_msg = f"Error inesperado al obtener documentos para {case_id}: {str(e)}"
-            logger.error(error_msg)
-            return error_msg
+
 
 class NotificarWhatsAppAPITool(BaseTool):
     """
@@ -279,9 +302,10 @@ class ActualizarPipefyAPITool(BaseTool):
             return error_msg
 
 # Lista de todas las herramientas disponibles para el agente
+# VERSIÓN SIMPLIFICADA: Integración elegante con tabla documents existente
 BACKEND_API_TOOLS = [
+    ObtenerDocumentosConContenidoAPITool(),  # NUEVA: Con contenido parseado integrado
     EnriquecerClienteAPITool(),
-    ObtenerDocumentosAPITool(),
     NotificarWhatsAppAPITool(),
     ActualizarPipefyAPITool()
 ] 

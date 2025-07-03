@@ -51,136 +51,8 @@ supabase_client: Optional[Client] = None
 # ============================================================================
 # HERRAMIENTAS SIMPLES QUE LLAMAN AL BACKEND
 # ============================================================================
-
-class EnriquecerClienteAPITool(BaseTool):
-    """
-    HERRAMIENTA SIMPLE: Enriquece datos de cliente con CNPJ
-    
-    El agente solo necesita saber:
-    "Para obtener todos los datos de un cliente, uso esta herramienta con el CNPJ"
-    
-    TODA la lógica compleja (CNPJá API, BrasilAPI, fallbacks, etc.) 
-    está en el backend, no aquí.
-    """
-    name: str = "enriquecer_cliente_api"
-    description: str = """
-    Enriquece los datos de un cliente usando su CNPJ.
-    Obtiene información completa de la empresa desde múltiples fuentes.
-    
-    Parámetros:
-    - cnpj: CNPJ de la empresa (solo números)
-    - case_id: ID del caso/card para asociar los datos
-    
-    Retorna: Información completa de la empresa o error si no se encuentra.
-    """
-    
-    def _run(self, cnpj: str, case_id: str) -> str:
-        """
-        Llama al backend para enriquecer datos de cliente.
-        Súper simple: solo hace la llamada HTTP.
-        """
-        try:
-            logger.info(f"🔍 Llamando al backend para enriquecer CNPJ: {cnpj}")
-            
-            # Preparar datos para el backend
-            payload = {
-                "cnpj": cnpj,
-                "case_id": case_id
-            }
-            
-            # Llamada HTTP simple al backend
-            with httpx.Client(timeout=60.0) as client:
-                response = client.post(
-                    f"{BACKEND_URL}/api/v1/cliente/enriquecer",
-                    json=payload
-                )
-                response.raise_for_status()
-                result = response.json()
-            
-            if result.get("success"):
-                logger.info(f"✅ Cliente enriquecido exitosamente: {cnpj}")
-                return f"Cliente enriquecido exitosamente. {result.get('message', '')}"
-            else:
-                logger.error(f"❌ Error al enriquecer cliente: {result.get('message')}")
-                return f"Error al enriquecer cliente: {result.get('message', 'Error desconocido')}"
-                
-        except httpx.TimeoutException:
-            error_msg = f"Timeout al enriquecer cliente {cnpj}. El backend tardó más de 60 segundos."
-            logger.error(error_msg)
-            return error_msg
-        except httpx.HTTPStatusError as e:
-            error_msg = f"Error HTTP {e.response.status_code} al enriquecer cliente {cnpj}"
-            logger.error(error_msg)
-            return error_msg
-        except Exception as e:
-            error_msg = f"Error inesperado al enriquecer cliente {cnpj}: {str(e)}"
-            logger.error(error_msg)
-            return error_msg
-
-class ObtenerDocumentosAPITool(BaseTool):
-    """
-    HERRAMIENTA SIMPLE: Obtiene documentos de un caso desde Supabase
-    
-    El agente solo necesita saber:
-    "Para obtener los documentos de un caso, uso esta herramienta con el case_id"
-    
-    TODA la lógica de Supabase está en el backend.
-    """
-    name: str = "obtener_documentos_api"
-    description: str = """
-    Obtiene la lista de documentos asociados a un caso específico.
-    
-    Parámetros:
-    - case_id: ID del caso/card del cual obtener documentos
-    
-    Retorna: Lista de documentos con sus URLs y metadatos.
-    """
-    
-    def _run(self, case_id: str) -> str:
-        """
-        Llama al backend para obtener documentos.
-        Súper simple: solo hace la llamada HTTP.
-        """
-        try:
-            logger.info(f"📄 Obteniendo documentos para case_id: {case_id}")
-            
-            # Llamada HTTP simple al backend
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(
-                    f"{BACKEND_URL}/api/v1/documentos/{case_id}"
-                )
-                response.raise_for_status()
-                result = response.json()
-            
-            if result.get("success"):
-                documents = result.get("documents", [])
-                logger.info(f"✅ Encontrados {len(documents)} documentos para case_id: {case_id}")
-                
-                if documents:
-                    doc_list = []
-                    for doc in documents:
-                        doc_info = f"- {doc.get('document_name', 'Sin nombre')} (Tag: {doc.get('document_tag', 'Sin tag')})"
-                        doc_list.append(doc_info)
-                    return f"Documentos encontrados para {case_id}:\n" + "\n".join(doc_list)
-                else:
-                    return f"No se encontraron documentos para el case_id: {case_id}"
-            else:
-                error_msg = f"Error al obtener documentos: {result.get('message', 'Error desconocido')}"
-                logger.error(error_msg)
-                return error_msg
-                
-        except httpx.TimeoutException:
-            error_msg = f"Timeout al obtener documentos para {case_id}"
-            logger.error(error_msg)
-            return error_msg
-        except httpx.HTTPStatusError as e:
-            error_msg = f"Error HTTP {e.response.status_code} al obtener documentos para {case_id}"
-            logger.error(error_msg)
-            return error_msg
-        except Exception as e:
-            error_msg = f"Error inesperado al obtener documentos para {case_id}: {str(e)}"
-            logger.error(error_msg)
-            return error_msg
+# NOTA: Las herramientas ahora están centralizadas en src/tools/backend_api_tools.py
+# para mantener la arquitectura modular limpia y evitar duplicación de código.
 
 # ============================================================================
 # CONFIGURACIÓN DEL AGENTE ENFOCADO
@@ -331,10 +203,8 @@ def create_triagem_agent() -> Agent:
         faq_source = create_faq_knowledge_source()
         
         # Herramientas simples que llaman al backend
-        tools = [
-            EnriquecerClienteAPITool(),
-            ObtenerDocumentosAPITool()
-        ]
+        from src.tools.backend_api_tools import BACKEND_API_TOOLS
+        tools = BACKEND_API_TOOLS
         
         return Agent(
             role=agent_config["triagem_agent"]["role"],
