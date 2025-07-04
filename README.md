@@ -174,10 +174,35 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
 ## Cambios recientes en el flujo de análisis y validación
 
-- El endpoint `/analyze` nunca bloquea el proceso: siempre ejecuta el análisis IA y reporta todas las pendencias y acciones automáticas.
-- Si falta el documento **Cartão CNPJ**, el sistema lo genera automáticamente usando la API de backend y registra la acción en el informe y los logs.
-- Todas las acciones automáticas (como generación de documentos) aparecen en el informe detallado y resumen, así como en los logs del sistema.
-- El flujo está alineado con las reglas de negocio y el checklist estructurado, y es completamente trazable.
+- El matching de documentos es realizado 100% por IA: el agente LLM recibe el nombre del ítem del checklist, los nombres y fragmentos de contenido de los documentos anexados, y decide cuál corresponde a cada ítem. No se usa ningún matching estructurado ni heurístico por subcadena.
+- Si falta el documento **Cartão CNPJ**, el sistema lo genera automáticamente usando la API de backend de ingestion y registra la acción en el informe y los logs. El resultado de la llamada (éxito, error, URL, etc.) queda registrado y es auditable.
+- Todos los pasos del flujo (matching IA, acción automática, guardado en Supabase) generan logs detallados, incluyendo el prompt enviado al LLM, la respuesta, la decisión tomada y la fuente de validación.
+- El flujo está alineado con las reglas de negocio y el checklist estructurado (`faq_checklist.json`), y es completamente trazable.
+
+### Ejemplo de logs de validación IA
+
+```
+[MATCHING-IA] Iniciando validación IA de documentos. Total ítems checklist: 9
+[MATCHING-IA] Prompt enviado al LLM para '2. Contrato/Estatuto Social Consolidado': ...
+[MATCHING-IA] Respuesta del LLM para '2. Contrato/Estatuto Social Consolidado': 2-ContratoSocial_12.2021.pdf
+[MATCHING-IA] Documento validado por IA: '2. Contrato/Estatuto Social Consolidado' → '2-ContratoSocial_12.2021.pdf'
+[MATCHING-IA] Documento faltante según IA: '1. Cartão CNPJ'
+[MATCHING-IA] Validación IA completada. Status general: Pendencia_Bloqueante
+```
+
+### Proceso resumido
+
+1. Se reciben los documentos anexados y el card de Pipefy.
+2. Para cada ítem del checklist, la IA decide si algún documento corresponde, usando nombre y fragmento de contenido.
+3. Si falta el Cartão CNPJ, se genera automáticamente y se registra la acción.
+4. El informe y los logs muestran la fuente de cada validación y todas las acciones automáticas ejecutadas.
+5. El informe se guarda en Supabase con validación robusta de tipos y valores.
+
+### Reglas de negocio
+
+- El proceso nunca bloquea: siempre se analiza todo y se reportan todas las pendencias.
+- El matching es 100% IA, sin heurísticas estructuradas.
+- Todas las acciones automáticas y validaciones quedan registradas y son auditables.
 
 ---
 

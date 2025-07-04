@@ -8,8 +8,16 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
 from crewai.knowledge.source.pdf_knowledge_source import PDFKnowledgeSource
+import unicodedata
 
 logger = logging.getLogger(__name__)
+
+def _normalize_name(name):
+    # Elimina acentos, pasa a minúsculas y quita caracteres especiales
+    name = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('ASCII')
+    name = name.lower().replace('-', ' ').replace('_', ' ').replace('.', ' ').replace('/', ' ')
+    name = ''.join(c for c in name if c.isalnum() or c.isspace())
+    return ' '.join(name.split())
 
 class FAQKnowledgeService:
     """
@@ -192,13 +200,6 @@ class FAQKnowledgeService:
             return None
 
     def validate_documents(self, documentos: list) -> dict:
-        """
-        Valida los documentos recibidos contra el checklist estructurado.
-        Args:
-            documentos: lista de dicts con info de los docs recibidos
-        Returns:
-            dict con resultado, logs y detalles de validación
-        """
         checklist = self.load_checklist()
         if not checklist:
             logger.error("❌ No hay checklist para validar documentos")
@@ -207,37 +208,61 @@ class FAQKnowledgeService:
         detalles = {}
         status_geral = "Aprovado"
         acciones_automaticas = []
+        from crewai.llms import OpenAI
+        llm = OpenAI()
+        logger.info(f"[MATCHING-IA] Iniciando validación IA de documentos. Total ítems checklist: {len(checklist)}")
         for regla in checklist:
             nombre = regla["Item do Checklist"].strip("* ")
-            requerido = regla["Documento Principal Requerido"]
-            validez = regla["Prazo/Validade Chave"]
-            clasificacion = regla["Classificação da Pendência (se houver)"]
-            accion = regla["Ação Automática do Sistema"]
-            # Buscar documento correspondiente
-            doc = next((d for d in documentos if nombre.lower() in d.get("name", "").lower()), None)
-            if not doc:
-                logs.append(f"❌ Falta documento: {nombre}")
-                detalles[nombre] = {"status": "Faltante", "regla": regla}
-                if "Bloqueante" in clasificacion:
-                    status_geral = "Pendencia_Bloqueante"
-                elif status_geral != "Pendencia_Bloqueante":
-                    status_geral = "Pendencia_NaoBloqueante"
-                # Registrar acción automática si aplica
-                if "Cartão CNPJ" in nombre or "cartão cnpj" in nombre.lower():
-                    acciones_automaticas.append({
-                        "type": "GENERATE_DOCUMENT",
-                        "document_type": nombre,
-                        "reason": "Falta Cartão CNPJ - se generará automáticamente",
-                        "accion": accion
-                    })
-                continue
-            # Validar validez (simplificado, se puede mejorar)
-            detalles[nombre] = {"status": "Presente", "regla": regla}
-            logs.append(f"✅ Documento presente: {nombre}")
-        # Si hay dudas o casos especiales, delegar a LLM
-        if status_geral == "Aprovado" and len(detalles) < len(checklist):
-            logs.append("⚠️ Validación estructurada incompleta, se recomienda consulta LLM para casos especiales.")
-        # SIEMPRE devolver status y logs completos, nunca bloquear el análisis IA
+            doc_names = [d.get("name", "") for d in documentos]
+            doc_contents = {d.get("name", ""): d.get("parsed_content", "")[:500] for d in documentos}
+            prompt = f"""
+Eres un asistente experto en validación documental para onboarding empresarial. Tu tarea es analizar si alguno de los documentos anexados corresponde al ítem del checklist:
+
+Ítem del checklist: '{nombre}'
+
+Documentos anexados (nombre): {doc_names}
+
+Fragmentos de contenido de cada documento (máx 500 caracteres):
+{json.dumps(doc_contents, ensure_ascii=False, indent=2)}
+
+Responde SOLO con el nombre exacto del documento que corresponde, o una lista de nombres si hay más de uno. Si ninguno corresponde, responde exactamente 'Ninguno'. Si tienes dudas, elige el más probable y explica brevemente por qué.
+"""
+            logger.info(f"[MATCHING-IA] Prompt enviado al LLM para '{nombre}': {prompt[:300]}...")
+            try:
+                respuesta = llm(prompt)
+                logger.info(f"[MATCHING-IA] Respuesta del LLM para '{nombre}': {respuesta}")
+                doc_match = None
+                razonamiento = respuesta
+                for i, d in enumerate(documentos):
+                    doc_name = d.get("name", "")
+                    if doc_name in respuesta or doc_name.lower() in respuesta.lower():
+                        doc_match = i
+                        break
+                if doc_match is not None:
+                    doc = documentos[doc_match]
+                    detalles[nombre] = {"status": "Presente", "regla": regla, "validacion": "IA", "razonamiento": razonamiento, "doc_name": doc.get("name")}
+                    logs.append(f"✅ Documento presente (IA): {nombre} → {doc.get('name')}")
+                    logger.info(f"[MATCHING-IA] Documento validado por IA: '{nombre}' → '{doc.get('name')}'")
+                else:
+                    detalles[nombre] = {"status": "Faltante", "regla": regla, "validacion": "IA", "razonamiento": razonamiento}
+                    logs.append(f"❌ Falta documento: {nombre}")
+                    logger.info(f"[MATCHING-IA] Documento faltante según IA: '{nombre}'")
+                    if "Bloqueante" in regla["Classificação da Pendência (se houver)"]:
+                        status_geral = "Pendencia_Bloqueante"
+                    elif status_geral != "Pendencia_Bloqueante":
+                        status_geral = "Pendencia_NaoBloqueante"
+                    if "Cartão CNPJ" in nombre or "cartão cnpj" in nombre.lower():
+                        acciones_automaticas.append({
+                            "type": "GENERATE_DOCUMENT",
+                            "document_type": nombre,
+                            "reason": "Falta Cartão CNPJ - se generará automáticamente",
+                            "accion": regla["Ação Automática do Sistema"]
+                        })
+            except Exception as e:
+                logger.warning(f"[MATCHING-IA] Error consultando LLM para matching de '{nombre}': {e}")
+                detalles[nombre] = {"status": "Faltante", "regla": regla, "error": str(e)}
+                logs.append(f"❌ Falta documento: {nombre} (error IA)")
+        logger.info(f"[MATCHING-IA] Validación IA completada. Status general: {status_geral}")
         return {"status": status_geral, "logs": logs, "detalles": detalles, "acciones_automaticas": acciones_automaticas}
 
 # Instancia global del servicio
