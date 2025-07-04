@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from crewai.knowledge.source.pdf_knowledge_source import PDFKnowledgeSource
 import unicodedata
+from crewai import LLM
 
 logger = logging.getLogger(__name__)
 
@@ -208,8 +209,7 @@ class FAQKnowledgeService:
         detalles = {}
         status_geral = "Aprovado"
         acciones_automaticas = []
-        from crewai.llms import OpenAI
-        llm = OpenAI()
+        llm = LLM(model="gpt-4o-mini")
         logger.info(f"[MATCHING-IA] Iniciando validación IA de documentos. Total ítems checklist: {len(checklist)}")
         for regla in checklist:
             nombre = regla["Item do Checklist"].strip("* ")
