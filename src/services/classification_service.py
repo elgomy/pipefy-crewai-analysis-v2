@@ -98,10 +98,21 @@ class ClassificationService:
                 logger.info(f"🔢 CNPJ extraído del card: '{cnpj_raw}' → normalizado: '{cnpj_clean}'")
                 enrich_result = None
                 if cnpj_clean and len(cnpj_clean) == 14:
-                    from src.tools.backend_api_tools import EnriquecerClienteAPITool
-                    tool = EnriquecerClienteAPITool()
-                    enrich_result = tool._run(cnpj_clean, case_id)
-                    logger.info(f"🛠️ Resultado de EnriquecerClienteAPITool: {enrich_result}")
+                    # Llamada real al backend de ingestion
+                    import httpx
+                    from config import settings
+                    ingestion_url = settings.DOCUMENT_INGESTION_URL.rstrip('/')
+                    endpoint = f"{ingestion_url}/api/v1/gerar_e_armazenar_cartao_cnpj"
+                    payload = {"cnpj": cnpj_clean, "case_id": case_id}
+                    try:
+                        logger.info(f"[CARTAO_CNPJ] Llamando a {endpoint} con payload: {payload}")
+                        response = httpx.post(endpoint, json=payload, timeout=60)
+                        response.raise_for_status()
+                        enrich_result = response.json()
+                        logger.info(f"[CARTAO_CNPJ] Respuesta backend: {enrich_result}")
+                    except Exception as e:
+                        logger.error(f"[CARTAO_CNPJ] Error llamando al backend de ingestion: {e}")
+                        enrich_result = {"success": False, "error": str(e)}
                     auto_actions_log.append({
                         "type": "GENERATE_DOCUMENT",
                         "document_type": cartao_cnpj_tag,
