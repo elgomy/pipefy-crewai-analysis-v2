@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 import re
+import math
 
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Header
 from pydantic import BaseModel, Field
@@ -282,10 +283,17 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
         from src.services.classification_service import classification_service
         result = classification_service.classify_documents(documents_by_tag, card_data, request.case_id)
         logger.info(f"✅ Análisis completado para case_id: {request.case_id}")
+        # Sanear risk_score antes de guardar
+        risk_score = result.confidence_score
+        if risk_score is None or not isinstance(risk_score, (int, float)) or math.isnan(risk_score) or risk_score < 0 or risk_score > 1:
+            logger.warning(f"⚠️ risk_score inválido detectado ({risk_score}), se asigna 0.0")
+            risk_score = 0.0
+        else:
+            logger.info(f"✅ risk_score válido: {risk_score}")
         analysis_result = {
             "informe": result.summary,
             "structured_response": result.classification_type.value,
-            "risk_score": result.confidence_score,
+            "risk_score": risk_score,
             "documents_analyzed": len(request.documents),
             "checklist_logs": validacion["logs"],
             "acciones_automaticas": validacion.get("acciones_automaticas", [])
@@ -295,10 +303,11 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
             informe_data = {
                 "case_id": request.case_id,
                 "informe": result.summary,
-                "risk_score": result.confidence_score,
+                "risk_score": risk_score,
                 "documents_analyzed": len(request.documents),
                 "analysis_details": result.classification_type.value
             }
+            logger.info(f"[SUPABASE] Insertando informe: {informe_data}")
             supabase_client.table("informe_cadastro").insert(informe_data).execute()
             logger.info(f"💾 Informe guardado en Supabase tabla informe_cadastro para case_id: {request.case_id}")
         except Exception as e:
