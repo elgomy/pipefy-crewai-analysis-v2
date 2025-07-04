@@ -1,0 +1,65 @@
+[
+  {
+    "Item do Checklist": "**1. Cartão CNPJ**",
+    "Documento Principal Requerido": "Cópia simples do Cartão CNPJ.",
+    "Prazo/Validade Chave": "Emitido há no máximo 90 dias.",
+    "Classificação da Pendência (se houver)": "**Não Bloqueante**",
+    "Ação Automática do Sistema": "A IA notifica a equipe de Cadastro. O sistema tentará gerar o documento automaticamente via API. O card irá para a fase **\"Emitir documentos\"**."
+  },
+  {
+    "Item do Checklist": "**2. Contrato/Estatuto Social Consolidado**",
+    "Documento Principal Requerido": "Cópia do último consolidado com nº de registro.",
+    "Prazo/Validade Chave": "Emitido há no máx. 3 anos.",
+    "Classificação da Pendência (se houver)": "**Não Bloqueante** (se pendência for apenas a data > 3 anos)",
+    "Ação Automática do Sistema": "A IA move o card para **\"Emitir documentos\"** para que a equipe de Cadastro emita a `Certidão Simplificada`."
+  },
+  {
+    "Item do Checklist": "**3. Falta de Nº de Registro**",
+    "Documento Principal Requerido": "Contrato/Estatuto/Ata sem o nº do órgão competente.",
+    "Prazo/Validade Chave": "N/A",
+    "Classificação da Pendência (se houver)": "**Bloqueante**",
+    "Ação Automática do Sistema": "A IA move o card para **\"Pendências Documentais\"** e notifica o gestor comercial via WhatsApp."
+  },
+  {
+    "Item do Checklist": "**4. Ata de Eleição da Diretoria**",
+    "Documento Principal Requerido": "Cópia da ata vigente com nº de registro (para S/A).",
+    "Prazo/Validade Chave": "Deve ser da diretoria vigente.",
+    "Classificação da Pendência (se houver)": "**Bloqueante** (se faltar registro)",
+    "Ação Automática do Sistema": "A IA move o card para **\"Pendências Documentais\"** e notifica o gestor comercial."
+  },
+  {
+    "Item do Checklist": "**5. Procuração**",
+    "Documento Principal Requerido": "Cópia com reconhecimento de firma ou assinatura digital.",
+    "Prazo/Validade Chave": "Vigente.",
+    "Classificação da Pendência (se houver)": "**Bloqueante** (se a validação da assinatura falhar)",
+    "Ação Automática do Sistema": "A IA move o card para **\"Pendências Documentais\"** e notifica o gestor."
+  },
+  {
+    "Item do Checklist": "**6. Docs Sócios (Identificação)**",
+    "Documento Principal Requerido": "RG/CPF ou CNH legíveis e vigentes.",
+    "Prazo/Validade Chave": "Vigentes.",
+    "Classificação da Pendência (se houver)": "**Bloqueante** (se ilegível ou inválido)",
+    "Ação Automática do Sistema": "A IA move o card para **\"Pendências Documentais\"** e notifica o gestor."
+  },
+  {
+    "Item do Checklist": "**7. Docs Sócios (Residência)**",
+    "Documento Principal Requerido": "Conta de consumo (máx. 90 dias) ou Declaração.",
+    "Prazo/Validade Chave": "Máx. 90 dias e titularidade correta.",
+    "Classificação da Pendência (se houver)": "**Bloqueante**",
+    "Ação Automática do Sistema": "A IA move o card para **\"Pendências Documentais\"** e notifica o gestor."
+  },
+  {
+    "Item do Checklist": "**8. Docs Financeiros (Balanço/Fat.)**",
+    "Documento Principal Requerido": "Balanço, DRE ou Relação de Faturamento.",
+    "Prazo/Validade Chave": "Datado, assinado (contador/representante).",
+    "Classificação da Pendência (se houver)": "**Bloqueante** (se faltar assinatura)",
+    "Ação Automática do Sistema": "A IA move o card para **\"Pendências Documentais\"** e notifica o gestor."
+  },
+  {
+    "Item do Checklist": "**9. Relatório de Visita**",
+    "Documento Principal Requerido": "Relatório de visita do gestor.",
+    "Prazo/Validade Chave": "Datado e assinado pelo gestor.",
+    "Classificação da Pendência (se houver)": "**Bloqueante** (se ausente ou incompleto)",
+    "Ação Automática do Sistema": "A IA move o card para **\"Pendências Documentais\"** e notifica o gestor."
+  }
+]
