@@ -250,10 +250,20 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
         for doc in request.documents:
             if not getattr(doc, 'parsed_content', None):
                 raise HTTPException(status_code=400, detail=f"El documento '{doc.name}' no tiene contenido parseado ('parsed_content')")
+        # Validación estructurada híbrida (checklist JSON)
+        documentos_input = [doc.dict() for doc in request.documents]
+        from src.services.faq_knowledge_service import faq_knowledge_service
+        validacion = faq_knowledge_service.validate_documents(documentos_input)
+        logger.info(f"📝 Resultado validación estructurada: {validacion['status']}")
+        for log in validacion["logs"]:
+            logger.info(f"[CHECKLIST] {log}")
+        if validacion.get("acciones_automaticas"):
+            for accion in validacion["acciones_automaticas"]:
+                logger.info(f"[ACCION_AUTOMATICA] {accion}")
         # Preparar inputs para el agente
         inputs = {
             "case_id": request.case_id,
-            "documents": [doc.dict() for doc in request.documents],
+            "documents": documentos_input,
             "current_date": request.current_date,
             "pipe_id": request.pipe_id or "default"
         }
@@ -262,24 +272,23 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
         if hasattr(request, 'cnpj'):
             cnpj_value = request.cnpj
         else:
-            # Buscar en los documentos si alguno tiene el campo cnpj
             for doc in request.documents:
                 if hasattr(doc, 'cnpj'):
                     cnpj_value = doc.cnpj
                     break
         card_data = {"cnpj": cnpj_value} if cnpj_value else {}
-        # Mapear documentos por tag
         documents_by_tag = {doc.document_tag: doc.dict() for doc in request.documents}
-        # Llamar al servicio de clasificación robusto
+        # Llamar al servicio de clasificación robusto (IA)
         from src.services.classification_service import classification_service
         result = classification_service.classify_documents(documents_by_tag, card_data, request.case_id)
         logger.info(f"✅ Análisis completado para case_id: {request.case_id}")
-        # Preparar respuesta compatible
         analysis_result = {
             "informe": result.summary,
             "structured_response": result.classification_type.value,
             "risk_score": result.confidence_score,
-            "documents_analyzed": len(request.documents)
+            "documents_analyzed": len(request.documents),
+            "checklist_logs": validacion["logs"],
+            "acciones_automaticas": validacion.get("acciones_automaticas", [])
         }
         # Guardar en Supabase (tabla informe_cadastro)
         try:

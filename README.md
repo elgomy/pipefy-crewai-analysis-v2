@@ -172,6 +172,13 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 - ⏸️ **Otros Agentes**: `extrator_agente` y `risco_agente` en stand-by
 - 🚀 **Escalabilidad**: Preparado para reintegrar otros agentes posteriormente
 
+## Cambios recientes en el flujo de análisis y validación
+
+- El endpoint `/analyze` nunca bloquea el proceso: siempre ejecuta el análisis IA y reporta todas las pendencias y acciones automáticas.
+- Si falta el documento **Cartão CNPJ**, el sistema lo genera automáticamente usando la API de backend y registra la acción en el informe y los logs.
+- Todas las acciones automáticas (como generación de documentos) aparecen en el informe detallado y resumen, así como en los logs del sistema.
+- El flujo está alineado con las reglas de negocio y el checklist estructurado, y es completamente trazable.
+
 ---
 
 **Versión**: 2.0 - Especializado en Triagem  

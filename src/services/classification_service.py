@@ -82,6 +82,7 @@ class ClassificationService:
             # Validar presencia de todos los documentos requeridos
             document_analyses = []
             docs_present = set(documents_data.keys())
+            auto_actions_log = []
             for doc_type in required_docs:
                 doc_data = documents_data.get(doc_type, {})
                 analysis = self._analyze_document(doc_type, doc_data)
@@ -95,13 +96,25 @@ class ClassificationService:
                 cnpj_raw = card_data.get("cnpj", "")
                 cnpj_clean = ''.join(filter(str.isdigit, str(cnpj_raw)))
                 logger.info(f"🔢 CNPJ extraído del card: '{cnpj_raw}' → normalizado: '{cnpj_clean}'")
+                enrich_result = None
                 if cnpj_clean and len(cnpj_clean) == 14:
                     from src.tools.backend_api_tools import EnriquecerClienteAPITool
                     tool = EnriquecerClienteAPITool()
                     enrich_result = tool._run(cnpj_clean, case_id)
                     logger.info(f"🛠️ Resultado de EnriquecerClienteAPITool: {enrich_result}")
+                    auto_actions_log.append({
+                        "type": "GENERATE_DOCUMENT",
+                        "document_type": cartao_cnpj_tag,
+                        "reason": "Falta Cartão CNPJ - generado automáticamente",
+                        "enrich_result": enrich_result
+                    })
                 else:
                     logger.warning(f"❌ CNPJ no válido o ausente en el card: '{cnpj_raw}'")
+                    auto_actions_log.append({
+                        "type": "GENERATE_DOCUMENT",
+                        "document_type": cartao_cnpj_tag,
+                        "reason": "Falta Cartão CNPJ - CNPJ no válido o ausente, no se pudo generar automáticamente"
+                    })
             # Determinar clasificación general
             classification_type = self._determine_classification(document_analyses)
             # Identificar issues
@@ -113,6 +126,9 @@ class ClassificationService:
                 blocking_issues,
                 non_blocking_issues
             )
+            # Agregar acciones automáticas de enriquecimiento
+            if auto_actions_log:
+                auto_actions.extend(auto_actions_log)
             # Calcular score de confianza
             confidence_score = self._calculate_confidence_score(document_analyses)
             # Generar resumen

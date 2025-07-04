@@ -25,6 +25,17 @@ class ResultFormatter:
         # Obtener timestamp actual
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        # Formatear acciones automáticas
+        acciones_auto = analysis_result.get("acciones_automaticas", [])
+        acciones_auto_str = ""
+        if acciones_auto:
+            acciones_auto_str = "\n## 🔄 Acciones Automáticas Ejecutadas:\n"
+            for accion in acciones_auto:
+                acciones_auto_str += f"- {accion.get('type', '')}: {accion.get('reason', '')}"
+                if 'enrich_result' in accion:
+                    acciones_auto_str += f" → {accion['enrich_result']}"
+                acciones_auto_str += "\n"
+
         # Formatear informe detallado
         detailed_report = f"""# 📄 Informe de Análisis - CrewAI v2.0
 
@@ -38,7 +49,7 @@ class ResultFormatter:
 
 ## 🔍 Detalles del Análisis
 {ResultFormatter._format_analysis_details(analysis_result)}
-
+{acciones_auto_str}
 ## 📝 Observaciones
 {analysis_result.get("observations", "Sin observaciones adicionales.")}
 
@@ -50,7 +61,8 @@ class ResultFormatter:
 Estado: {"✅ Completo" if analysis_result.get("is_complete") else "⚠️ Incompleto"}
 Fecha: {timestamp}
 
-{ResultFormatter._format_summary(analysis_result)}"""
+{ResultFormatter._format_summary(analysis_result)}
+{acciones_auto_str}"""
 
         return {
             "detailed_report": detailed_report,

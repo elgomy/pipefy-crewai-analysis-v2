@@ -13,6 +13,7 @@ import httpx
 import json
 import os
 from unittest.mock import patch, MagicMock
+from datetime import datetime
 
 # URLs de los servicios
 CREWAI_URL = os.getenv("CREWAI_URL", "http://localhost:8001")
@@ -162,6 +163,26 @@ class TestCrewAIIntegration:
             print(f"✅ Tool configured: {tool_name}")
         
         print(f"✅ All backend API tools validated")
+
+    @pytest.mark.asyncio
+    async def test_cartao_cnpj_automatic_generation(self):
+        """Test: Si falta Cartão CNPJ, se genera automáticamente y aparece en acciones automáticas"""
+        test_payload = {
+            "case_id": "test_case_cartao_cnpj_001",
+            "documents": [
+                {"name": "Contrato Social.pdf", "file_url": "https://test.supabase.co/storage/v1/contrato.pdf", "document_tag": "contrato_social", "parsed_content": "Contrato Social de la empresa..."}
+                # No se incluye Cartão CNPJ
+            ],
+            "current_date": datetime.now().isoformat()
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(f"{CREWAI_URL}/analyze", json=test_payload)
+            assert response.status_code == 200
+            result = response.json()
+            assert result["status"] == "completed"
+            acciones = result["analysis_result"].get("acciones_automaticas", [])
+            assert any(a["type"] == "GENERATE_DOCUMENT" and "Cartão CNPJ" in a.get("document_type", "") for a in acciones)
+            print(f"✅ Cartão CNPJ generado automáticamente y acción registrada en análisis: {acciones}")
 
 class TestCrewAIBackendCommunication:
     """Tests específicos para la comunicación CrewAI ↔ Backend"""
