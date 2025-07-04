@@ -290,11 +290,18 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
             risk_score = 0.0
         else:
             logger.info(f"✅ risk_score válido: {risk_score}")
+        # Validar tipos de los demás campos
+        try:
+            documents_analyzed = int(len(request.documents))
+        except Exception:
+            documents_analyzed = 0
+        informe = str(result.summary) if result.summary is not None else ""
+        analysis_details = str(result.classification_type.value) if result.classification_type else ""
         analysis_result = {
-            "informe": result.summary,
-            "structured_response": result.classification_type.value,
+            "informe": informe,
+            "structured_response": analysis_details,
             "risk_score": risk_score,
-            "documents_analyzed": len(request.documents),
+            "documents_analyzed": documents_analyzed,
             "checklist_logs": validacion["logs"],
             "acciones_automaticas": validacion.get("acciones_automaticas", [])
         }
@@ -302,16 +309,18 @@ async def analyze_documents(request: AnalysisRequest) -> AnalysisResponse:
         try:
             informe_data = {
                 "case_id": request.case_id,
-                "informe": result.summary,
-                "risk_score": risk_score,
-                "documents_analyzed": len(request.documents),
-                "analysis_details": result.classification_type.value
+                "informe": informe,
+                "risk_score": float(risk_score),
+                "documents_analyzed": documents_analyzed,
+                "analysis_details": analysis_details
             }
             logger.info(f"[SUPABASE] Insertando informe: {informe_data}")
-            supabase_client.table("informe_cadastro").insert(informe_data).execute()
+            response = supabase_client.table("informe_cadastro").insert(informe_data).execute()
+            logger.info(f"[SUPABASE] Respuesta: {response}")
             logger.info(f"💾 Informe guardado en Supabase tabla informe_cadastro para case_id: {request.case_id}")
         except Exception as e:
             logger.error(f"❌ Error guardando informe en Supabase: {e}")
+            logger.error("Sugerencia: Revisa la definición de la tabla 'informe_cadastro' en Supabase Studio y prueba un insert manual con los mismos datos para depurar el constraint.")
         return AnalysisResponse(
             status="completed",
             case_id=request.case_id,
